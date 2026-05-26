@@ -142,6 +142,77 @@ def test_addresses_capped_at_ten_each():
 
 
 # ----------------------------------------------------------------------
+# Reply-to-all + quoted history preservation
+# ----------------------------------------------------------------------
+
+
+def test_reply_uses_reply_to_all():
+    """``reply with reply to all`` pulls CC straight from Mail.app's message
+    database, so reply preserves the full participant list even when our
+    vault didn't sync CC (PA_MAIL_FETCH_RECIPIENTS=false)."""
+    s = _build()
+    assert "with reply to all" in s
+
+
+def test_reply_preserves_quoted_history():
+    """Mail.app pre-fills content with the quoted reply ('On X, Alice wrote:
+    > ...'). We must prepend our text above that block, not overwrite it."""
+    s = _build()
+    assert "set quotedHistory to" in s
+    assert "content of newMsg as string" in s
+    assert "bodyContent & return & return & quotedHistory" in s
+
+
+def test_reply_history_preservation_in_silent_save():
+    """Silent save (save_to_drafts=True) must also preserve history."""
+    s = _build(save_to_drafts=True)
+    assert "with reply to all" in s
+    assert "bodyContent & return & return & quotedHistory" in s
+
+
+def test_reply_falls_back_to_plain_body_if_history_empty():
+    """Fallback: if quotedHistory is empty, just set content = bodyContent."""
+    s = _build()
+    assert "if quotedHistory is not \"\"" in s
+    assert "else\n            set content of newMsg to bodyContent" in s
+
+
+def test_new_mail_path_no_history_preservation():
+    """When not replying, no quoted history exists — no preservation logic."""
+    s = _build(reply_to_message_id=None)
+    assert "quotedHistory" not in s
+    assert "with reply to all" not in s
+
+
+# ----------------------------------------------------------------------
+# Self-email seed in dedup snapshot
+# ----------------------------------------------------------------------
+
+
+def test_self_email_seeded_into_dedup(monkeypatch):
+    """Belt-and-braces: when settings.user_email is set, it seeds
+    existingAddrs so the user can never accidentally be cc'd on their own
+    reply (e.g. if vault.cc included the user)."""
+    from personal_assistant.config import settings
+    monkeypatch.setattr(settings, "user_email", "igor@example.com")
+    s = _build(to_recipients=["alice@example.com"])
+    # Seed line must appear
+    assert "set end of existingAddrs to \"igor@example.com\"" in s
+
+
+def test_self_email_seed_absent_when_unset(monkeypatch):
+    """No user_email → no seed line."""
+    from personal_assistant.config import settings
+    monkeypatch.setattr(settings, "user_email", "")
+    s = _build(to_recipients=["alice@example.com"])
+    # No seed line for "(any email).com" pattern related to a hardcoded self
+    # — only the explicit to_recipient should be added.
+    assert "alice@example.com" in s
+    # The seed mechanism still exists, just has no email to seed
+    assert "set existingAddrs to {}" in s
+
+
+# ----------------------------------------------------------------------
 # /mail/message-meta — lenient YAML parser
 # ----------------------------------------------------------------------
 

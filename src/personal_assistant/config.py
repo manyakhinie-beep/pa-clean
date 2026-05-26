@@ -229,7 +229,12 @@ class Settings:
         self.mail_fetch_body: bool = _env_bool("MAIL_FETCH_BODY", True) or _env_bool(
             "MAIL_FETCH_SNIPPET", False
         )
-        self.mail_fetch_recipients: bool = _env_bool("MAIL_FETCH_RECIPIENTS", False)
+        # Fetching recipients (To/CC) costs ~5 extra AppleScript IPC calls
+        # per message but is required for reply-all (chat draft button) to
+        # restore the full participant list on existing threads. Defaults
+        # to True so the WebUI reply flow works out of the box; users with
+        # huge inboxes can disable via PA_MAIL_FETCH_RECIPIENTS=false.
+        self.mail_fetch_recipients: bool = _env_bool("MAIL_FETCH_RECIPIENTS", True)
         self.mail_fetch_attachments: bool = _env_bool("MAIL_FETCH_ATTACHMENTS", False)
         self.mail_attachments_path: str = _env(
             "MAIL_ATTACHMENTS_PATH",

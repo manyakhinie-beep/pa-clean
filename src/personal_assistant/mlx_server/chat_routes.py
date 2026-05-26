@@ -775,27 +775,61 @@ def _build_save_draft_mail_script(
 
         # Snapshot the addresses Mail auto-populated in the reply (To+CC).
         # Case-insensitive comparison happens via ``ignoring case`` below.
-        snapshot_existing = """\
-    set existingAddrs to {}
-    try
-        repeat with _r in to recipients of newMsg
-            try
-                set end of existingAddrs to ((address of _r) as string)
-            end try
-        end repeat
-        repeat with _r in cc recipients of newMsg
-            try
-                set end of existingAddrs to ((address of _r) as string)
-            end try
-        end repeat
-    end try
-"""
+        # We also seed existingAddrs with the user's own email so a stale
+        # vault entry that lists the user in CC can't re-cc them on the
+        # reply (Mail.app normally excludes self from Reply All, but this is
+        # a belt-and-braces guard).
+        try:
+            from personal_assistant.config import settings as _cfg
+            self_email = (_cfg.user_email or "").strip()
+        except Exception:
+            self_email = ""
+        self_email_seed = (
+            f'    set end of existingAddrs to "{_esc(self_email)}"\n'
+            if self_email
+            else ""
+        )
+        snapshot_existing = (
+            "    set existingAddrs to {}\n"
+            f"{self_email_seed}"
+            "    try\n"
+            "        repeat with _r in to recipients of newMsg\n"
+            "            try\n"
+            "                set end of existingAddrs to ((address of _r) as string)\n"
+            "            end try\n"
+            "        end repeat\n"
+            "        repeat with _r in cc recipients of newMsg\n"
+            "            try\n"
+            "                set end of existingAddrs to ((address of _r) as string)\n"
+            "            end try\n"
+            "        end repeat\n"
+            "    end try\n"
+        )
 
         if save_to_drafts:
-            # Silent save: reply with window closed, then save newMsg
+            # Silent save: reply with window closed, then save newMsg.
+            #
+            # ``with reply to all`` — pulls To AND CC straight from Mail.app's
+            # message database, so the reply preserves the full participant
+            # list even when our vault didn't sync CC (default
+            # PA_MAIL_FETCH_RECIPIENTS=false).
+            #
+            # Body composition: Mail.app already pre-fills ``content`` with
+            # the quoted thread history ("On <date>, Alice wrote: > ..."). If
+            # we ``set content to bodyContent`` we wipe that history.
+            # Instead, prepend our text above the existing quoted block so
+            # the user sees: AI draft → blank line → quoted history.
             found_branch = f"""\
-        set newMsg to reply origMsg opening window false
-        set content of newMsg to bodyContent
+        set newMsg to reply origMsg with reply to all opening window false
+        set quotedHistory to ""
+        try
+            set quotedHistory to content of newMsg as string
+        end try
+        if quotedHistory is not "" then
+            set content of newMsg to (bodyContent & return & return & quotedHistory)
+        else
+            set content of newMsg to bodyContent
+        end if
         set subject of newMsg to "{esc_subject}"
 """
             notfound_branch = f"""\
@@ -815,11 +849,23 @@ def _build_save_draft_mail_script(
             )
         else:
             # Open compose window:
-            # - found: reply origMsg opening window true  → already shows window
+            # - found: reply origMsg with reply to all  → window already shown
             # - not found: make new + open newMsg
+            #
+            # Same rationale as the silent-save branch: reply-to-all pulls
+            # the full participant list from Mail.app, and we prepend our
+            # draft above the auto-generated quoted history.
             found_branch = f"""\
-        set newMsg to reply origMsg opening window true
-        set content of newMsg to bodyContent
+        set newMsg to reply origMsg with reply to all opening window true
+        set quotedHistory to ""
+        try
+            set quotedHistory to content of newMsg as string
+        end try
+        if quotedHistory is not "" then
+            set content of newMsg to (bodyContent & return & return & quotedHistory)
+        else
+            set content of newMsg to bodyContent
+        end if
         set subject of newMsg to "{esc_subject}"
 """
             notfound_branch = f"""\
