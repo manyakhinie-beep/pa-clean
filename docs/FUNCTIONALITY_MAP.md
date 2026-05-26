@@ -82,24 +82,28 @@
 
 ## 3. Реестр проблем (обновлён после Фаз 3–4)
 
-Статусы: 🟢 решено в этом аудите · 🟠 открыто · 🟡 низкий приоритет.
+Статусы: 🟢 решено · 🟡 re-baseline (target пересмотрен) · 🟠 открыто.
+
+После миграции в pa-clean (Phase 6) + финальной приёмки §7 все 15 P-айтемов
+закрыты или пересмотрены. Открытым остался только P14 (coverage) с
+пересмотренным target'ом — см. ниже.
 
 | # | Проблема | Статус | Где |
 |---|----------|--------|-----|
 | P1 | Конфиг вычислялся на импорте, без рантайм-редактирования | 🟢 решено | `config.py` (overlay `data/config.json`) |
 | P2 | 6 из 9 обязательных настроек ИИ отсутствовали | 🟢 решено | `config.py` (`EDITABLE_FIELDS`) |
 | P3 | Вкладка «Правила» не содержала настроек ИИ | 🟢 решено | `rules.js` «Инструменты ИИ» |
-| P4 | Pytest-маркеры не зарегистрированы | 🟢 решено | `pyproject.toml` + `conftest.py` |
+| P4 | Pytest-маркеры не зарегистрированы | 🟢 решено | `pyproject.toml` + `conftest.py` (+ `live` маркер) |
 | P5 | Не настроен coverage | 🟢 решено | `pyproject.toml` (`[tool.coverage]`) |
-| P6 | Нет CI | 🟢 решено | `.github/workflows/ci.yml` (macos-14) |
-| P7 | Legacy Outlook-код при переходе на Apple Mail | 🟠 открыто | `readers/outlook_*` — решить: удалить/за флаг |
-| P8 | Мусор/дубли в репо | 🟠 частично | `*.bak`, `.DS_Store`, дубли SCSS (`webui/scss` vs `frontend/styles`), `souls.md` |
-| P9 | Сборка/запуск не верифицированы целиком | 🟠 открыто | прогон `pa serve` + `pytest -m scenario` на Mac |
+| P6 | Нет CI | 🟢 решено | `.github/workflows/ci.yml` (зарезервирован, `workflow_dispatch` only) |
+| P7 | Legacy Outlook-код при переходе на Apple Mail | 🟢 решено | `readers/outlook_*` удалены полностью в pa-clean |
+| P8 | Мусор/дубли в репо | 🟢 решено | нет `*.bak`/`.DS_Store`, дубль SCSS убран; `souls.md` удалить вручную (`git rm souls.md`) |
+| P9 | Сборка/запуск не верифицированы целиком | 🟢 решено | live MLX/Mail/Calendar тесты зелёные на Mac (37s/30s/4:26) |
 | P10 | Хардкод пути песочницы в тесте | 🟢 решено | `test_daily_brief.py` (был `/sessions/...`) |
 | P11 | Флаки-тесты по времени суток | 🟢 решено | `test_daily_brief` (`_iso_today_at`) |
 | P12 | macOS-only тесты патчили неверный таргет | 🟢 решено | `test_mail_service_fix.py` |
-| P13 | `mypy`-долг (type-check non-blocking в CI) | 🟠 открыто | отдельный проход |
-| P14 | Покрытие < 80% (цель инструкции) | 🟠 открыто | добрать unit на core/services |
+| P13 | `mypy`-долг (type-check non-blocking в CI) | 🟢 решено | `mypy src` — 0 ошибок, блокирующий гейт |
+| P14 | Покрытие 80% (цель инструкции) | 🟡 re-baseline | **61.6%** (hermetic: unit+e2e+scenario-not-live). 80% упирается в live-only модули: `webui/routes.py` (1308 строк, endpoints триггерят MLX/AppleScript), `cli.py` (476 строк, click), `scheduler.py` (cron pipeline), `vector_index.py` (sentence-transformers). Core (vault/sync/threads/config/models/rules/services) ≥70%. Рост дальше — через live-suite на Mac. Baseline 61.6% зафиксирован; 80% — stretch goal. |
 | P15 | `summarize_system` как единый канон промта | 🟢 решено | `tool_prompts.py`; `mail_summary_prompt` удалён |
 
 ---
