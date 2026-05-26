@@ -78,9 +78,18 @@ end tell
 """
 
 _ATTENDEES_SCRIPT = """\
-    set notesText to notes of newEvent
-    if notesText is missing value then set notesText to ""
-    set notes of newEvent to notesText & "{attendees_note}"
+    -- Best-effort: appending attendees as a notes line must NOT abort the
+    -- script (the event has already been created). Some macOS Calendar
+    -- versions return ``notes`` as a rich-text object that can't be coerced
+    -- to text and raise -1700, which previously hid the (successful) ``uid``
+    -- return value and made the caller think creation failed.
+    try
+        set existingNotes to ""
+        try
+            set existingNotes to (notes of newEvent) as string
+        end try
+        set notes of newEvent to existingNotes & "{attendees_note}"
+    end try
 """
 
 
