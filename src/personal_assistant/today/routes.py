@@ -47,34 +47,46 @@ def _initials(name: str) -> str:
 
 
 def _fmt_time(date_str: Optional[str]) -> str:
+    """Format an ISO datetime to a short human label using wall-clock digits.
+
+    Storage convention (see ``readers/calendar_reader.py``): event start/end
+    are stored as local wall-clock digits with a synthetic ``+0000`` tz tag
+    (a legacy artifact of the AppleScript ISO formatter).  We therefore read
+    the digits raw and do **not** call ``.astimezone()`` — applying tz
+    conversion to local-time-tagged-as-UTC produces an off-by-N-hours bug
+    where N = system UTC offset (+3 MSK, +4 Samara, +5 Yekaterinburg, etc.).
+
+    For date arithmetic (today / yesterday / weekday) we likewise treat the
+    digits as the local date.
+    """
     if not date_str:
         return ""
     try:
         dt = datetime.fromisoformat(str(date_str).replace("Z", "+00:00"))
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
-        now = datetime.now(timezone.utc)
-        delta = now.date() - dt.date()
+        # Strip tz to get raw wall-clock digits for arithmetic + formatting.
+        naive_dt = dt.replace(tzinfo=None)
+        today = datetime.now().date()
+        delta = today - naive_dt.date()
         if delta.days == 0:
-            return dt.strftime("%H:%M")
+            return naive_dt.strftime("%H:%M")
         if delta.days == 1:
             return "вчера"
         _days = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"]
-        return _days[dt.weekday()] if delta.days <= 6 else dt.strftime("%d.%m")
+        return _days[naive_dt.weekday()] if delta.days <= 6 else naive_dt.strftime("%d.%m")
     except Exception:
         return str(date_str)[:5]
 
 
 def _is_today(date_str: Optional[str]) -> bool:
+    # Wall-clock comparison — see _fmt_time for the storage convention.
     if not date_str:
         return False
     try:
         dt = datetime.fromisoformat(str(date_str).replace("Z", "+00:00"))
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        local_now = datetime.now(timezone.utc).astimezone()
-        local_dt  = dt.astimezone()
-        return local_dt.date() == local_now.date()
+        naive_dt = dt.replace(tzinfo=None) if dt.tzinfo else dt
+        return naive_dt.date() == datetime.now().date()
     except Exception:
         return False
 
@@ -170,15 +182,16 @@ def _build_today_data(idx) -> dict:
 
         time_label = _fmt_time(doc.date) if doc.date else ""
 
-        # Determine status dot
-        now = datetime.now(timezone.utc)
+        # Status dot — compare wall-clock to wall-clock.  Mixing aware UTC
+        # ``now`` with stored UTC-tagged-but-local-time datetimes shifts
+        # ``diff`` by N hours and produces wrong status flags.
+        now_naive = datetime.now()
         status = "past"
         try:
             if doc.date:
                 dt = datetime.fromisoformat(str(doc.date).replace("Z", "+00:00"))
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
-                diff = (dt - now).total_seconds()
+                naive_dt = dt.replace(tzinfo=None) if dt.tzinfo else dt
+                diff = (naive_dt - now_naive).total_seconds()
                 if diff > 3600:
                     status = "upcoming"
                 elif diff > -3600:
@@ -203,7 +216,10 @@ def _build_today_data(idx) -> dict:
             "path": str(doc.path),
         }
 
-    events = [_event_from_doc(d) for d in today_events_raw[:8]]
+    # Show ALL events scheduled today (no cap) so users with full days see
+    # everything. The fallback path (no today events) still uses the 6-doc
+    # cap on most-recent past events.
+    events = [_event_from_doc(d) for d in today_events_raw]
 
     # ── Mail docs sorted by date desc ─────────────────────────────────────────
     mail_docs = [d for d in today_docs if d.section == "mail"]

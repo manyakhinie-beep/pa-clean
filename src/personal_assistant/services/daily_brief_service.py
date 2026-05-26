@@ -114,24 +114,30 @@ def _parse_iso(date_str: str) -> Optional[datetime]:
 
 
 def _fmt_time(dt: datetime) -> str:
-    return dt.astimezone().strftime("%H:%M")
+    # Storage convention: digits are local wall-clock with a synthetic UTC
+    # tag (legacy AppleScript output). Display raw digits — see
+    # ``calendar/routes.py._fmt_relative`` for full rationale.
+    return dt.replace(tzinfo=None).strftime("%H:%M")
 
 
 def _is_today_dt(dt: datetime) -> bool:
-    local_now = datetime.now(timezone.utc).astimezone()
-    return dt.astimezone().date() == local_now.date()
+    today = datetime.now().date()
+    return dt.replace(tzinfo=None).date() == today
 
 
 def _is_now(dt: datetime, window_min: int = 30) -> bool:
     """True if the event is happening within ±window_min minutes of now."""
-    now = datetime.now(timezone.utc)
-    return abs((dt - now).total_seconds()) <= window_min * 60
+    # Compare wall-clock to wall-clock (treat stored digits as local naive).
+    now_naive = datetime.now()
+    naive_dt = dt.replace(tzinfo=None) if dt.tzinfo else dt
+    return abs((naive_dt - now_naive).total_seconds()) <= window_min * 60
 
 
 def _is_soon(dt: datetime, minutes: int = 60) -> bool:
     """True if the event starts within the next `minutes` minutes."""
-    now = datetime.now(timezone.utc)
-    delta = (dt - now).total_seconds()
+    now_naive = datetime.now()
+    naive_dt = dt.replace(tzinfo=None) if dt.tzinfo else dt
+    delta = (naive_dt - now_naive).total_seconds()
     return 0 <= delta <= minutes * 60
 
 

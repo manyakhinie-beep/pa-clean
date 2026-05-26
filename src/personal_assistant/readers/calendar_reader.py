@@ -445,6 +445,14 @@ class CalendarReader:
 
     def _convert(self, item: dict) -> CalendarEvent:
         def _dt(s: str) -> datetime:
+            # AppleScript's isoDate() emits LOCAL wall-clock digits without an
+            # offset.  We keep the legacy convention of tagging them as UTC for
+            # storage compatibility; the display layer in
+            # ``calendar/routes.py``, ``today/routes.py`` and
+            # ``daily_brief_service`` deliberately reads digits as wall-clock
+            # time and does NOT apply ``.astimezone()`` — see those modules
+            # for rationale (events show as scheduled, not shifted by the
+            # reader/viewer tz offset).
             if not s:
                 return datetime.now(tz=timezone.utc)
             try:

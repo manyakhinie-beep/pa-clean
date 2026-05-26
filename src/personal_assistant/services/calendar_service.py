@@ -201,10 +201,11 @@ def fetch_upcoming_events(
     if not cal_path.exists():
         return []
 
-    # TZ-aware: vault md files store ISO-with-offset (e.g. ``+00:00``).
-    # Comparing against ``datetime.now()`` (naive local) drops the event when
-    # the local-time offset crosses a day boundary. Use UTC throughout.
-    now = datetime.now(timezone.utc)
+    # Storage convention: digits are local wall-clock (see calendar_reader).
+    # Window comparison must therefore use naive (wall-clock) datetimes —
+    # mixing naive now with UTC-tagged stored datetimes shifts the window by
+    # the system's UTC offset and drops legitimate events near boundaries.
+    now = datetime.now()
     cutoff = now + timedelta(days=days_forward)
 
     results: list[dict] = []
@@ -217,11 +218,11 @@ def fetch_upcoming_events(
             date_str = str(fm.get("date") or fm.get("start") or "")
             if not date_str:
                 continue
-            # Parse ISO date / datetime — assume UTC when offset missing.
             try:
                 event_dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-                if event_dt.tzinfo is None:
-                    event_dt = event_dt.replace(tzinfo=timezone.utc)
+                # Strip tz so the digits compare directly to naive local now.
+                if event_dt.tzinfo is not None:
+                    event_dt = event_dt.replace(tzinfo=None)
             except ValueError:
                 continue
             if not (now <= event_dt <= cutoff):

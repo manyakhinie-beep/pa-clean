@@ -68,11 +68,18 @@ def _parse_iso(date_str: str) -> Optional[datetime]:
 
 
 def _fmt_relative(dt: datetime) -> str:
-    """Return human-readable relative time: 'сегодня 14:00', 'завтра 10:30', ..."""
-    now = datetime.now(timezone.utc).astimezone()
-    local_dt = dt.astimezone()
-    delta = (local_dt.date() - now.date()).days
-    time_str = local_dt.strftime("%H:%M")
+    """Return human-readable relative time: 'сегодня 14:00', 'завтра 10:30', ...
+
+    Storage convention (see ``readers/calendar_reader.py``): event start/end
+    are stored as local wall-clock digits with a synthetic ``+0000`` tag.
+    We therefore strip the tz and read the digits raw — applying
+    ``.astimezone()`` to local-time-tagged-as-UTC would shift the displayed
+    time by the system's UTC offset (e.g. +3h MSK, +4h Samara, +5h Yekat).
+    """
+    naive_dt = dt.replace(tzinfo=None) if dt.tzinfo else dt
+    today = datetime.now().date()
+    delta = (naive_dt.date() - today).days
+    time_str = naive_dt.strftime("%H:%M")
     if delta == 0:
         return f"сегодня {time_str}"
     if delta == 1:
@@ -80,7 +87,7 @@ def _fmt_relative(dt: datetime) -> str:
     if delta < 0:
         return f"{abs(delta)} дн. назад"
     days_ru = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"]
-    return f"{days_ru[local_dt.weekday()]} {time_str}"
+    return f"{days_ru[naive_dt.weekday()]} {time_str}"
 
 
 def _scan_upcoming_events(
@@ -95,8 +102,10 @@ def _scan_upcoming_events(
     if not calendar_dir.exists():
         return results
 
-    now = datetime.now(timezone.utc)
-    cutoff = now + timedelta(days=days_ahead)
+    # Window in naive (wall-clock) datetimes — stored digits are local time
+    # (see _fmt_relative for rationale).
+    now_naive = datetime.now()
+    cutoff_naive = now_naive + timedelta(days=days_ahead)
 
     for md_path in sorted(calendar_dir.rglob("*.md")):
         try:
@@ -122,7 +131,9 @@ def _scan_upcoming_events(
             dt = _parse_iso(date_str)
             if dt is None:
                 continue
-            if not (now <= dt <= cutoff):
+            # Compare wall-clock to wall-clock — see _fmt_relative.
+            naive_dt = dt.replace(tzinfo=None) if dt.tzinfo else dt
+            if not (now_naive <= naive_dt <= cutoff_naive):
                 continue
 
             doc_id = str(fm.get("id") or md_path.stem).strip()

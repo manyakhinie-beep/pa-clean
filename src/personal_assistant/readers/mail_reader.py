@@ -423,6 +423,9 @@ class MailReader:
         cc = _addr_list(item.get("cc", ""))
 
         def _dt(s: str) -> datetime:
+            # AppleScript emits local wall-clock digits without an offset;
+            # we tag as UTC for storage compatibility — see calendar_reader._dt
+            # for the rationale.  Display layers read the digits as wall-clock.
             try:
                 return datetime.fromisoformat(s).replace(tzinfo=timezone.utc)
             except Exception:
