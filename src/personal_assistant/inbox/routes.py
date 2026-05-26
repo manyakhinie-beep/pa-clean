@@ -480,6 +480,16 @@ def get_inbox(
         for it in all_items:
             it.setdefault("followup_needed", False)
 
+    # --- User-defined GTD + structured rules (Срочно/Важно/Ответить) ---
+    # OR-merge rule-derived urgency/importance/followup flags on top of the
+    # tag-based detection.  Without this, rules configured in the WebUI's
+    # "Правила" tab had no effect on inbox filtering.
+    try:
+        from personal_assistant.services.inbox_rules_service import apply_rules_to_items
+        apply_rules_to_items(all_items)
+    except Exception as exc:
+        logger.warning(f"[inbox] rule application failed: {exc}")
+
     # Apply urgency/importance/followup filter
     if filter == "urgent":
         all_items = [it for it in all_items if it["is_urgent"]]
