@@ -20,6 +20,7 @@ let _stats  = { total: 0, unread: 0, urgent: 0, important: 0, followup: 0 };
 let _activeIdx  = -1;
 let _filter     = 'all';
 let _sortBy     = 'date';    // 'date' | 'priority'
+let _search     = '';        // quick search query — filters _items by ФИО/тема/превью
 let _ctx        = null;
 let _summaryCache    = {};   // item_id → summary string
 let _suggestCache    = {};   // item_id → { next_actions, tag_suggestions }
@@ -65,6 +66,42 @@ function renderTagBadges(tags) {
 }
 
 // ---------------------------------------------------------------------------
+// Quick search — client-side filter across sender ФИО / email / subject /
+// preview / tags / sender_role.  Whitespace splits the query into AND-tokens
+// so "иванов смета" matches items containing both substrings (case- and
+// diacritic-insensitive).
+// ---------------------------------------------------------------------------
+function _normalize(s) {
+  if (s == null) return '';
+  // NFD strips combining marks (U+0300..U+036F) so accented variants and
+  // "ё"/"е" all match. Lowercase for case-insensitive compare.
+  return String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}
+
+function _itemMatchesSearch(item, tokens) {
+  if (!tokens.length) return true;
+  const tagLabels = Array.isArray(item.tags)
+    ? item.tags.map(t => t.label || t.cls || (typeof t === 'string' ? t : '')).join(' ')
+    : '';
+  const haystack = _normalize([
+    item.sender_name,
+    item.sender_email,
+    item.sender_role,
+    item.subject,
+    item.body_preview || item.preview,
+    tagLabels,
+  ].filter(Boolean).join(' \n '));
+  return tokens.every(tok => haystack.includes(tok));
+}
+
+function _filteredItems() {
+  if (!_search.trim()) return _items;
+  const tokens = _normalize(_search).split(/\s+/).filter(Boolean);
+  if (!tokens.length) return _items;
+  return _items.filter(it => _itemMatchesSearch(it, tokens));
+}
+
+// ---------------------------------------------------------------------------
 // List rendering
 // ---------------------------------------------------------------------------
 function renderList() {
@@ -87,7 +124,20 @@ function renderList() {
     return;
   }
 
-  container.innerHTML = _items.map((item, i) => {
+  // Apply quick-search filter; preserve original _items indices so the
+  // existing keyboard/click handlers and _activeIdx semantics keep working.
+  const visible = _filteredItems();
+  if (!visible.length && _search.trim()) {
+    container.innerHTML = `
+      <div class="ib-list-empty">
+        <span>Ничего не найдено</span>
+        <small>Запрос «${_esc(_search.trim())}» — попробуйте другие слова или Esc</small>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = visible.map((item) => {
+    const i = _items.indexOf(item);
     const active  = i === _activeIdx ? ' ib-item--active'  : '';
     const read    = item.read        ? ' ib-item--read'    : '';
     const urgent  = item.is_urgent   ? ' ib-item--urgent'  : '';
@@ -1164,6 +1214,56 @@ function scrollActiveIntoView() {
 }
 
 // ---------------------------------------------------------------------------
+// Quick-search input
+// ---------------------------------------------------------------------------
+function setupSearchInput() {
+  const input = document.getElementById('ib-search-input');
+  const clear = document.getElementById('ib-search-clear');
+  if (!input) return;
+
+  // Debounce so we don't re-render on every keystroke in 500-item inboxes.
+  let debounceId = null;
+  const apply = () => {
+    _search = input.value || '';
+    if (clear) clear.style.display = _search.trim() ? '' : 'none';
+    _activeIdx = -1;
+    renderList();
+    renderDetail();
+  };
+  const schedule = () => {
+    if (debounceId) clearTimeout(debounceId);
+    debounceId = setTimeout(apply, 120);
+  };
+
+  input.addEventListener('input', schedule);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      input.value = '';
+      apply();
+      input.blur();
+    }
+  });
+  clear?.addEventListener('click', () => {
+    input.value = '';
+    apply();
+    input.focus();
+  });
+
+  // "/" focuses the search box from anywhere in the inbox tab (skip when
+  // user is already typing in another input/textarea).
+  document.addEventListener('keydown', e => {
+    if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+    const tag = (e.target?.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable) return;
+    const panel = document.querySelector('.tab-panel[data-tab="inbox"].tab-panel--active');
+    if (!panel) return;
+    e.preventDefault();
+    input.focus();
+    input.select();
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Filter tabs
 // ---------------------------------------------------------------------------
 function setupFilterTabs() {
@@ -1211,6 +1311,7 @@ export function initInbox(ctx) {
   _ctx = ctx;
 
   setupFilterTabs();
+  setupSearchInput();
   document.addEventListener('keydown', handleKey);
 
   // Reload when tab becomes active

@@ -294,6 +294,24 @@
             <button class="ib-filter-tab" data-filter="calendar">События</button>
             <button class="ib-sort-toggle" id="ib-sort-toggle" title="Сортировка">↓ Дата</button>
           </div>
+          <div class="ib-search">
+            <span class="ib-search__icon" aria-hidden="true">🔍</span>
+            <input
+              id="ib-search-input"
+              class="ib-search__input"
+              type="search"
+              placeholder="Поиск: ФИО, тема, текст…"
+              autocomplete="off"
+              spellcheck="false"
+              aria-label="Поиск по входящим" />
+            <button
+              id="ib-search-clear"
+              class="ib-search__clear"
+              type="button"
+              title="Очистить (Esc)"
+              aria-label="Очистить поиск"
+              style="display:none">×</button>
+          </div>
           <div id="ib-list"></div>
         </div>
 
