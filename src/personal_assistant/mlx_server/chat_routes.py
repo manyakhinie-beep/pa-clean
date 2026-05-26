@@ -720,6 +720,77 @@ def _build_save_draft_mail_script(
         clean_mid = re.sub(r"\s+", "", reply_to_message_id)
         esc_mid = _esc(clean_mid)
 
+        # ── Dedup-aware recipient blocks for the reply branch ──────────────
+        #
+        # When ``reply origMsg`` is called, Mail.app auto-populates the
+        # ``to recipients`` of the new draft with the original sender (and
+        # for Reply-All, with the other recipients too).  If we then blindly
+        # call ``make new to recipient with properties {address:"X"}`` for
+        # the same address, the compose window shows the duplicate — the
+        # user reported this as "адресаты дублируются".
+        #
+        # Strategy: snapshot the addresses already on the draft into a list,
+        # then for each requested recipient use ``ignoring case`` to test
+        # membership before appending. This keeps the explicit
+        # ``to_recipients``/``cc_recipients`` parameters useful (caller can
+        # add a third party, e.g. loop someone in), but stops them from
+        # re-adding what Mail already populated.
+        def _make_dedup_to_block(addrs: list[str]) -> str:
+            if not addrs:
+                return ""
+            parts: list[str] = []
+            for a in addrs[:10]:
+                esc_addr = _esc(a)
+                parts.append(
+                    "    ignoring case\n"
+                    f"        if existingAddrs does not contain \"{esc_addr}\" then\n"
+                    "            make new to recipient at end of to recipients of newMsg "
+                    f"with properties {{address:\"{esc_addr}\"}}\n"
+                    f"            set end of existingAddrs to \"{esc_addr}\"\n"
+                    "        end if\n"
+                    "    end ignoring"
+                )
+            return "\n".join(parts)
+
+        def _make_dedup_cc_block(addrs: list[str]) -> str:
+            if not addrs:
+                return ""
+            parts: list[str] = []
+            for a in addrs[:10]:
+                esc_addr = _esc(a)
+                parts.append(
+                    "    ignoring case\n"
+                    f"        if existingAddrs does not contain \"{esc_addr}\" then\n"
+                    "            make new cc recipient at end of cc recipients of newMsg "
+                    f"with properties {{address:\"{esc_addr}\"}}\n"
+                    f"            set end of existingAddrs to \"{esc_addr}\"\n"
+                    "        end if\n"
+                    "    end ignoring"
+                )
+            return "\n".join(parts)
+
+        dedup_to_block = _make_dedup_to_block(to_recipients)
+        dedup_cc_block = _make_dedup_cc_block(cc_recipients)
+        dedup_extra_recipients = "\n".join(filter(None, [dedup_to_block, dedup_cc_block]))
+
+        # Snapshot the addresses Mail auto-populated in the reply (To+CC).
+        # Case-insensitive comparison happens via ``ignoring case`` below.
+        snapshot_existing = """\
+    set existingAddrs to {}
+    try
+        repeat with _r in to recipients of newMsg
+            try
+                set end of existingAddrs to ((address of _r) as string)
+            end try
+        end repeat
+        repeat with _r in cc recipients of newMsg
+            try
+                set end of existingAddrs to ((address of _r) as string)
+            end try
+        end repeat
+    end try
+"""
+
         if save_to_drafts:
             # Silent save: reply with window closed, then save newMsg
             found_branch = f"""\
@@ -731,8 +802,17 @@ def _build_save_draft_mail_script(
         set newMsg to make new outgoing message with properties {{subject:"{esc_subject}", visible:false}}
         set content of newMsg to bodyContent
 """
-            extra_block = (extra_recipients + "\n") if extra_recipients.strip() else ""
-            tail = f"{extra_block}    save newMsg"
+            new_extra_block = (extra_recipients + "\n") if extra_recipients.strip() else ""
+            # In reply branch — use dedup-aware adds; in fallback — use plain adds.
+            tail = (
+                f"if origMsg is not missing value then\n"
+                f"{snapshot_existing}"
+                f"{dedup_extra_recipients}\n"
+                f"    else\n"
+                f"{new_extra_block}"
+                f"    end if\n"
+                f"    save newMsg"
+            )
         else:
             # Open compose window:
             # - found: reply origMsg opening window true  → already shows window
@@ -747,8 +827,15 @@ def _build_save_draft_mail_script(
         set content of newMsg to bodyContent
         open newMsg
 """
-            extra_block = (extra_recipients + "\n") if extra_recipients.strip() else ""
-            tail = extra_block.rstrip()
+            new_extra_block = (extra_recipients + "\n") if extra_recipients.strip() else ""
+            tail = (
+                f"if origMsg is not missing value then\n"
+                f"{snapshot_existing}"
+                f"{dedup_extra_recipients}\n"
+                f"    else\n"
+                f"{new_extra_block.rstrip()}\n"
+                f"    end if"
+            )
 
         return f"""\
 set bodyContent to do shell script "cat " & quoted form of "{body_file_path}"
@@ -905,9 +992,8 @@ def get_mail_message_meta(message_id: str):
         ``{message_id, subject, sender_email, sender_name, recipients, cc, thread_id}``
         or 404 if not found.
     """
-    import yaml
-
     from personal_assistant.config import settings
+    from personal_assistant.utils.frontmatter import parse_lenient
 
     mail_root = settings.vault_path / "mail"
     if not mail_root.exists():
@@ -915,21 +1001,13 @@ def get_mail_message_meta(message_id: str):
 
     clean_id = message_id.strip()
 
-    def _parse_fm(text: str) -> dict:
-        if not text.startswith("---"):
-            return {}
-        end = text.find("\n---", 3)
-        if end == -1:
-            return {}
-        try:
-            return yaml.safe_load(text[3:end].strip()) or {}
-        except Exception:
-            return {}
-
     for md_file in mail_root.rglob("*.md"):
         try:
             text = md_file.read_text(encoding="utf-8")
-            fm = _parse_fm(text)
+            # Lenient parser repairs legacy run-on YAML (Jinja trim_blocks bug)
+            # so reply pre-fill keeps working on older vault entries — same
+            # rationale as _resolve_reply_message_id.
+            fm = parse_lenient(text)
             file_stem = md_file.stem
             doc_id = str(fm.get("id") or file_stem).strip()
             msg_id = str(fm.get("message_id") or "").strip()
