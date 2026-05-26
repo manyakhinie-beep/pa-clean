@@ -62,7 +62,7 @@ def _norm_subject(subject: str) -> str:
 
 def _tid(key: str) -> str:
     """12-char hex thread/series ID from a stable key string."""
-    return hashlib.md5(key.encode()).hexdigest()[:12]
+    return hashlib.md5(key.encode(), usedforsecurity=False).hexdigest()[:12]
 
 
 def _extract_refs(body: Optional[str]) -> tuple[Optional[str], list[str]]:

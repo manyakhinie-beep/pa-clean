@@ -257,7 +257,7 @@ class VaultIndex:
                 for f in p.rglob("*.md"):
                     mtimes.append(f.stat().st_mtime)
         key = f"{_CACHE_VERSION}:{sorted(sections)}:{sorted(mtimes)}"
-        return hashlib.md5(key.encode()).hexdigest()
+        return hashlib.md5(key.encode(), usedforsecurity=False).hexdigest()
 
     def _try_load_cache(self, sections: list[str]) -> bool:
         cache = self._cache_path()

@@ -2136,7 +2136,7 @@ def _testdata_thread_id(subject: str) -> str:
     while s != prev:
         prev = s
         s = _TESTDATA_REPLY_RE.sub("", s)
-    return _hashlib.md5(s.strip().lower().encode("utf-8", errors="replace")).hexdigest()[:12]
+    return _hashlib.md5(s.strip().lower().encode("utf-8", errors="replace"), usedforsecurity=False).hexdigest()[:12]
 
 
 def _make_mail_md(mail: dict, now: _dt) -> str:

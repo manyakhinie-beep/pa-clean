@@ -27,10 +27,8 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -413,12 +411,12 @@ def generate(vault: Path, user_email: str = "igor@example.com") -> None:
     print(f"\n✅ Vault создан: {vault}")
     print("\nПроверьте сценарии:")
     print(f"  GET /api/v1/inbox                                   → {5} писем")
-    print(f"  POST /api/v1/inbox/msg_q2_003/draft-context         → тред из 3 писем")
-    print(f"  POST /api/v1/inbox/msg_contract_002/draft-context   → тред из 2 писем")
-    print(f"  GET /api/v1/calendar/upcoming                       → 2 встречи")
-    print(f"  GET /api/v1/calendar/meeting_quarterly_review/prep  → бриф с письмами Петрова")
-    print(f"  GET /api/v1/brief/daily                             → сводка дня")
-    print(f"  GET /api/v1/today                                   → dashboard")
+    print("  POST /api/v1/inbox/msg_q2_003/draft-context         → тред из 3 писем")
+    print("  POST /api/v1/inbox/msg_contract_002/draft-context   → тред из 2 писем")
+    print("  GET /api/v1/calendar/upcoming                       → 2 встречи")
+    print("  GET /api/v1/calendar/meeting_quarterly_review/prep  → бриф с письмами Петрова")
+    print("  GET /api/v1/brief/daily                             → сводка дня")
+    print("  GET /api/v1/today                                   → dashboard")
 
 
 # ---------------------------------------------------------------------------

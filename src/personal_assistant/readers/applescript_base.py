@@ -248,7 +248,7 @@ def compute_thread_id(subject: str) -> str:
         prev = s
         s = _REPLY_PREFIX_RE.sub("", s)
     normalised = s.strip().lower()
-    return hashlib.md5(normalised.encode("utf-8", errors="replace")).hexdigest()[:12]
+    return hashlib.md5(normalised.encode("utf-8", errors="replace"), usedforsecurity=False).hexdigest()[:12]
 
 
 # Control characters that are illegal in JSON strings:

@@ -33,7 +33,7 @@ _AVATAR_COLORS = [
 
 
 def _avatar_color(name: str) -> str:
-    idx = int(hashlib.md5(name.encode()).hexdigest(), 16) % len(_AVATAR_COLORS)
+    idx = int(hashlib.md5(name.encode(), usedforsecurity=False).hexdigest(), 16) % len(_AVATAR_COLORS)
     return _AVATAR_COLORS[idx]
 
 
