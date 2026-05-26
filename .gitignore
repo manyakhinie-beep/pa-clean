@@ -1,0 +1,132 @@
+# =============================================================================
+# pa-merge — .gitignore
+# =============================================================================
+
+# ── Environment & secrets ─────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+/dist/
+/build/
+*.egg-info/
+*.egg
+MANIFEST
+.eggs/
+
+# ── uv / pip ──────────────────────────────────────────────────────────────────
+.venv/
+venv/
+# NOTE: uv.lock IS committed — it pins deps for reproducible installs.
+# If you want to opt out: echo "uv.lock" >> .gitignore
+.python-version
+
+# ── Test & coverage ───────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+*.coveragerc
+pytest-cache-files-*/
+
+# ── Type checking ─────────────────────────────────────────────────────────────
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyright/
+
+# ── Linter ────────────────────────────────────────────────────────────────────
+.ruff_cache/
+
+# ── Node / WebUI ──────────────────────────────────────────────────────────────
+node_modules/
+webui/node_modules/
+webui/.cache/
+# Keep webui/dist/ in version control — pre-built, no Node.js required to run
+# webui/dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+.AppleDouble
+.LSOverride
+
+# ── Editors ───────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.bak
+*.orig
+
+# ── Runtime data (user-specific, generated at runtime) ───────────────────────
+# These files live in data/ and are created automatically on first run.
+data/chat.db
+data/chat.db-journal
+data/personal_vault.db
+data/personal_vault.db-journal
+data/snapshots/
+# Editable AI-tool settings overlay written by the "Правила" (Rules) tab.
+data/config.json
+# Classify / rules / projects — user configures these at runtime.
+# Committed defaults (if any) live in data/.gitkeep or similar.
+# Uncomment to also ignore the config files:
+# data/classify.yaml
+# data/gtd_rules.json
+# data/eisenhower.json
+# data/projects.json
+# data/reports.json
+# data/rules.json
+
+# ── Personal vault (private data) ─────────────────────────────────────────────
+# The vault lives outside the repo (PA_VAULT_PATH), but guard against
+# accidental commits if someone points PA_VAULT_PATH into the project dir.
+PersonalAssistantVault/
+vault/
+*.md.vault
+
+# ── MLX / AI models (large binary files) ─────────────────────────────────────
+models/
+*.safetensors
+*.gguf
+*.bin
+*.mlmodel
+*.mlpackage/
+*.pt
+*.pth
+
+# ── Vector / search index ─────────────────────────────────────────────────────
+.lancedb/
+*.lance/
+.index_cache.pkl
+*.faiss
+*.ann
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+logs/
+sync.log
+pa.log
+
+# ── Misc ──────────────────────────────────────────────────────────────────────
+*.tmp
+*.temp
+.cache/
+tmp/

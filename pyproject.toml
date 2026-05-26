@@ -1,0 +1,134 @@
+[project]
+name = "pa-merge"
+version = "1.0.0"
+description = "Personal AI assistant — Apple Calendar + Mail sync, local MLX inference"
+requires-python = ">=3.10,<3.14"
+dependencies = [
+    # Apple data sync (osascript-based, no PyObjC)
+    "click>=8.1",
+    "python-dotenv>=1.0",
+    "pydantic>=2.0",
+    "jinja2>=3.1",
+    "rich>=13.0",
+    "loguru>=0.7",
+
+    # HTTP server
+    "fastapi>=0.111.0",
+    "uvicorn[standard]>=0.29.0",
+
+    # Scheduler
+    "apscheduler>=3.10.4",
+
+    # Vault / YAML / BM25
+    "pyyaml>=6.0",
+    "rank-bm25>=0.2.2",
+
+    # MLX inference — only exists for macOS arm64 (no x86_64 / Linux wheels).
+    "mlx-lm>=0.19.0",
+]
+
+[project.optional-dependencies]
+# Hybrid vector search (Stage M2)
+# numpy already pulled in by sentence-transformers as transitive dep;
+# listed here explicitly to guarantee numpy is available for flat index.
+vector = [
+    "numpy>=1.26",
+    "sentence-transformers>=3.0.0",
+]
+
+[project.scripts]
+pa = "personal_assistant.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/personal_assistant"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-mock>=3.0",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
+    "httpx>=0.27.0",
+    "ruff>=0.15.13",
+    "mypy>=2.1.0",
+    "locust>=2.28",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+# NOTE: --cov is intentionally NOT in addopts so the default `pytest` run works
+# even when pytest-cov is not installed. Opt in explicitly, e.g.:
+#   pytest --cov=src --cov-report=term-missing --cov-report=html
+addopts = "-ra -q"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::UserWarning",
+]
+# Marker taxonomy. Top-level category markers (unit/e2e/scenario) are applied
+# automatically by directory in tests/conftest.py; integration sub-markers
+# (mlx/mail/calendar) are applied automatically by path keyword. They can also
+# be set explicitly with @pytest.mark.<name>. Run groups with, e.g.:
+#   pytest -m unit
+#   pytest -m "scenario and mlx"
+markers = [
+    "unit: fast, isolated unit test (no MLX / Apple / network / real vault)",
+    "e2e: end-to-end test exercising the WebUI/API server",
+    "scenario: integration scenario against a real subsystem",
+    "mlx: requires local MLX inference (macOS arm64 only)",
+    "mail: exercises Apple Mail access or mail parsing/decoding",
+    "calendar: exercises Apple Calendar access or calendar/date logic",
+    "live: drives a real external integration (Apple AppleScript/Automation permission or a local MLX model); exclude from unattended runs with -m 'not live'",
+]
+
+
+[tool.coverage.run]
+branch = true
+source = ["src"]
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+    "*/templates/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+precision = 1
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "@(abc\\.)?abstractmethod",
+]
+
+[tool.coverage.html]
+directory = "htmlcov"
+
+
+[tool.ruff]
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
+
+
+[tool.uv]
+# Lock only for darwin arm64 — mlx-lm has no x86_64/Linux wheels.
+environments = [
+    "sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+# Notes about unchecked bodies of untyped functions are informational only.
+disable_error_code = ["annotation-unchecked"]
