@@ -13,6 +13,8 @@
 - [TESTING.md](TESTING.md) — запуск тестов, маркеры, покрытие, CI.
 - [INTEGRATIONS.md](INTEGRATIONS.md) — MLX, Apple Mail, Apple Calendar: права доступа и ограничения.
 - [docs/FUNCTIONALITY_MAP.md](docs/FUNCTIONALITY_MAP.md) — карта функционала и реестр проблем.
+- [docs/REMOTE_SETUP.md](docs/REMOTE_SETUP.md) — установка на удалённой / корпоративной машине (Rosetta, прокси-блоки).
+- [docs/UAT.md](docs/UAT.md) — ручной чеклист пользовательской приёмки.
 
 ---
 
