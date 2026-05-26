@@ -6,16 +6,24 @@ calendar: {{ event.calendar_name or "Неизвестно" }}
 start: {{ event.start.strftime('%Y-%m-%dT%H:%M:%S%z') }}
 end: {{ event.end.strftime('%Y-%m-%dT%H:%M:%S%z') }}
 all_day: {{ event.all_day | lower }}
-{% if event.location %}location: "{{ event.location }}"{% endif %}
-{% if event.organizer %}organizer: "[[contacts/{{ event.organizer }}]]"{% endif %}
+{% if event.location %}
+location: "{{ event.location | replace('"', '\\"') }}"
+{% endif %}
+{% if event.organizer %}
+organizer: "[[contacts/{{ event.organizer }}]]"
+{% endif %}
 {% if event.attendees %}
 attendees:
-{% for a in event.attendees %}  - "[[contacts/{{ a }}]]"
-{% endfor %}{% endif %}
+{% for a in event.attendees %}
+  - "[[contacts/{{ a }}]]"
+{% endfor %}
+{% endif %}
 {% if event.attachments %}
 attachments:
-{% for name in event.attachments %}  - "{{ name | replace('"', '\\"') }}"
-{% endfor %}{% endif %}
+{% for name in event.attachments %}
+  - "{{ name | replace('"', '\\"') }}"
+{% endfor %}
+{% endif %}
 tags: [календарь]
 created: {{ now }}
 ---
