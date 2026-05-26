@@ -34,9 +34,13 @@ def _skip_reason() -> str | None:
     except ImportError:
         return "mlx-lm not installed"
 
-    from personal_assistant.config import settings
+    # Read from the snapshot taken by the root conftest at import time —
+    # ``settings.mlx_model_path`` is blanked there to keep unit/e2e hermetic,
+    # but the original env var is preserved in ``ORIG_PA_MLX_MODEL_PATH`` so
+    # live MLX runs invoked as ``PA_MLX_MODEL_PATH=… pytest …`` still resolve.
+    from tests.conftest import ORIG_PA_MLX_MODEL_PATH
 
-    model_path = settings.mlx_model_path
+    model_path = ORIG_PA_MLX_MODEL_PATH.strip()
     if not model_path:
         return "PA_MLX_MODEL_PATH not set"
     if not Path(model_path).exists():

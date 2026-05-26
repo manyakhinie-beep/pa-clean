@@ -54,7 +54,12 @@ def _skip_reason() -> str | None:
 # with ``-m "not live"``. The access probe runs at setup time (autouse fixture
 # below) rather than at import, so a ``-m "not live"`` selection never triggers
 # the macOS permission prompt during collection.
-pytestmark = pytest.mark.live
+#
+# The filename "test_applescript_scenarios.py" carries no ``calendar``/``mail``
+# keywords, so the path-based auto-marker in tests/conftest.py does not tag
+# this file. Add both sub-markers explicitly so it is selected by
+# ``-m "scenario and live and calendar"`` and ``... and mail"``.
+pytestmark = [pytest.mark.live, pytest.mark.calendar, pytest.mark.mail]
 
 
 @pytest.fixture(autouse=True, scope="module")
@@ -63,6 +68,26 @@ def _require_applescript_access():
     if reason:
         pytest.skip(f"AppleScript scenario skipped: {reason}")
     yield
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _disable_e2e_test_mode():
+    """Root conftest forces ``e2e_test_mode=True`` so unit/e2e never touch
+    real Apple apps. But these are *live* tests — ``calendar_writer.create_event``
+    would otherwise short-circuit to ``event_uid="e2e-test-mode"`` instead of
+    actually creating an event in Calendar.app, breaking the real-write
+    assertions.
+
+    Module-scoped (not function-scoped) so that this fixture runs BEFORE the
+    class-scoped ``test_event_uid`` fixture below — otherwise the test event
+    would be created with the stub UID before this short-circuit could be
+    disabled. ``monkeypatch`` is function-scoped so we save/restore manually."""
+    from personal_assistant.config import settings
+
+    orig = settings.e2e_test_mode
+    settings.e2e_test_mode = False
+    yield
+    settings.e2e_test_mode = orig
 
 
 # ---------------------------------------------------------------------------

@@ -1,9 +1,14 @@
-name: CI
+name: CI (inactive — manual dispatch only)
 
+# Deactivated for this repo per project owner decision: GitHub CI not used.
+# To re-enable automatic runs, restore the ``push`` / ``pull_request`` triggers
+# below. The workflow body is preserved as a reference for future activation.
+#
+# on:
+#   push:
+#     branches: [main]
+#   pull_request:
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 
 concurrency:

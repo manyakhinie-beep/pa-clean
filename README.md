@@ -1,4 +1,4 @@
-# pa-merge — Personal AI Assistant
+# pa-clean — Personal AI Assistant
 
 Оффлайн-ассистент для macOS: синхронизирует Apple Calendar и Apple Mail
 в локальное Markdown-хранилище (vault) и отвечает на вопросы через локальный MLX-инференс.
@@ -27,7 +27,6 @@
 - [Синхронизация данных](#синхронизация-данных)
 - [Сервисы](#сервисы)
 - [CLI-команды](#cli-команды)
-- [make.sh — все команды](#makesh--все-команды)
 - [Тестирование](#тестирование)
 - [Структура проекта](#структура-проекта)
 - [Устранение неисправностей](#устранение-неисправностей)
@@ -46,7 +45,7 @@
 
 > **Python 3.14+** — MLX не поддерживает cp314. Для инференса используйте Python 3.13:
 > ```bash
-> uv python install 3.13 && uv venv --python 3.13 && ./make.sh build
+> uv python install 3.13 && uv venv --python 3.13 && uv sync && (cd webui && npm install && npm run build)
 > ```
 >
 > **Intel Mac** — сервер запустится, чат вернёт `503`. Vault, поиск и синхронизация работают.
@@ -57,11 +56,13 @@
 
 ```bash
 # 1. Клонировать
-git clone https://github.com/your-org/pa-merge
-cd pa-merge
+git clone https://github.com/your-org/pa-clean
+cd pa-clean
 
-# 2. Полная сборка (Python + WebUI + создать .env)
-./make.sh build
+# 2. Полная сборка: deps + WebUI + создать .env
+cp .env.example .env
+uv sync
+(cd webui && npm install && npm run build)
 
 # 3. Настроить .env (обязательно: vault-путь и MLX-модель)
 $EDITOR .env
@@ -70,7 +71,7 @@ $EDITOR .env
 uv run pa check
 
 # 5. Запустить
-./make.sh run
+uv run pa serve
 ```
 
 WebUI доступен на **http://127.0.0.1:8000**.
@@ -79,7 +80,7 @@ WebUI доступен на **http://127.0.0.1:8000**.
 
 ## Конфигурация
 
-Все настройки в `.env` (создаётся из `.env.example` при `./make.sh build`).
+Все настройки в `.env` (скопируйте из `.env.example`: `cp .env.example .env`).
 
 ```dotenv
 # Где хранить vault (.md файлы с письмами, встречами, контактами)
@@ -113,17 +114,14 @@ PA_SCHEDULE_CRON=0 9 * * *
 ## Запуск
 
 ```bash
-# Рекомендуемый способ — пересобирает WebUI при изменении SCSS
-./make.sh run
+# Базовый запуск
+uv run pa serve
 
-# Эквивалент (тот же сервер, без проверки WebUI)
-./run.sh
-
-# Dev-режим с авто-перезагрузкой при изменении исходников
-./make.sh dev
-
-# Явный запуск
+# С предзагрузкой MLX-модели (первый чат-запрос мгновенный)
 uv run pa serve --preload-model
+
+# Пересборка WebUI после изменений в frontend/
+(cd webui && npm run build)
 ```
 
 ---
@@ -598,7 +596,7 @@ llm_classify:
 }
 ```
 
-> **Важно:** `tools/registry.json` должен существовать до старта сервера. Файл создаётся при `./make.sh build`. Если файл отсутствует — validator возвращает пустой реестр и все tool calls проходят без валидации.
+> **Важно:** `tools/registry.json` должен существовать до старта сервера. Файл закоммичен в репозиторий. Если он отсутствует — validator возвращает пустой реестр и все tool calls проходят без валидации.
 
 #### Встроенный инструмент `date_calc`
 
@@ -636,13 +634,12 @@ llm_classify:
 ## Синхронизация данных
 
 ```bash
-# Все источники из PA_SYNC_SOURCES
-./make.sh sync
+# Все источники из PA_SYNC_SOURCES (одной командой)
+uv run pa sync-all
 
 # Отдельные источники через CLI
 uv run pa sync-calendar --days-back 30 --days-forward 90
 uv run pa sync-mail     --days-back 30
-uv run pa sync-all
 ```
 
 > Синхронизация **только читает** данные. Оригинальные файлы Calendar / Mail не изменяются.
@@ -773,60 +770,28 @@ uv run pa fix-model-config исправить int/float mismatch в config.json 
 
 ---
 
-## make.sh — все команды
-
-```
-# Первый запуск
-./make.sh build          Полная сборка с нуля (Python + WebUI + .env)   ← после клонирования
-./make.sh env-example    Создать .env из .env.example (не перезаписывает)
-
-# Запуск
-./make.sh run            Запуск сервера (авто-пересборка WebUI при изменениях) ← повседневный
-./make.sh dev            Сервер с авто-перезагрузкой FastAPI (для разработки)
-./make.sh serve          Сервер без проверки WebUI на актуальность
-
-# WebUI
-./make.sh webui          Пересобрать WebUI (SCSS → CSS + bundle JS + index.html)
-./make.sh webui-watch    Следить за изменениями и пересобирать (Ctrl+C для выхода)
-
-# Зависимости
-./make.sh install        Установить Python (uv) + Node (npm) зависимости
-
-# Данные (только macOS)
-./make.sh sync           Синхронизировать Calendar + Mail → vault
-./make.sh build-index    Построить BM25 + LanceDB поисковый индекс
-
-# Тесты и качество
-./make.sh check          lint + type-check + полный тест-сьют   ← CI-шорткат
-./make.sh test           Запустить только unit-тесты (tests/unit/)
-./make.sh test-fast      Все тесты, остановиться на первой ошибке (-x)
-./make.sh test-cov       Тесты с HTML-отчётом о покрытии (htmlcov/)
-./make.sh e2e            E2E-сценарии (tests/e2e/)
-./make.sh lint           ruff check src/ tests/
-./make.sh format         ruff format + auto-fix
-./make.sh type-check     mypy src/personal_assistant
-
-# Обслуживание
-./make.sh clean          Удалить __pycache__, .pytest_cache, артефакты сборки
-                         (пропускает node_modules/ и .venv/ — быстро)
-./make.sh clean-vault    Удалить кэш BM25-индекса (.index_cache.pkl)
-./make.sh help           Показать справку
-```
-
-> **Stale-check в `./make.sh run`**: сравнивает все `*.scss` и `*.js` из `webui/frontend/` и `webui/index.html` с `webui/dist/index.html` (последний файл, генерируемый build'ом). Если любой источник новее — WebUI пересобирается автоматически.
-
----
-
 ## Тестирование
 
-Тесты не требуют Calendar, Mail, MLX или сети — используются in-memory SQLite
-и временные директории.
+Гермети́чный гейт (unit + e2e + scenario-not-live) не требует Calendar, Mail, MLX
+или сети — используются in-memory SQLite и временные директории. Live scenario
+тесты — отдельным флагом, см. [TESTING.md](TESTING.md).
 
 ```bash
-./make.sh test           # все тесты
-./make.sh test-fast      # остановиться на первой ошибке
-./make.sh test-cov       # с покрытием
-./make.sh e2e            # e2e-сценарии
+uv run pytest -m unit                          # юнит-тесты
+uv run pytest -m e2e                           # FastAPI TestClient
+uv run pytest -m "scenario and not live"       # моковые сценарии
+uv run pytest -m "(unit or e2e) or (scenario and not live)"   # всё герметичное
+
+# Live (нужен Mac + права + модель — см. TESTING.md):
+PA_MLX_MODEL_PATH=/path/to/model uv run pytest -m "scenario and live and mlx"
+uv run pytest -m "scenario and live and (mail or calendar)"
+
+# С покрытием
+uv run pytest -m unit --cov=src --cov-report=html
+
+# Lint и типы
+uv run ruff check src tests
+uv run mypy src
 
 # Конкретный модуль
 uv run pytest tests/unit/sync/ -v
@@ -878,9 +843,9 @@ uv run pytest tests/unit/mlx/ -v
 ### Линтер и типизация
 
 ```bash
-./make.sh lint        # ruff check — должно быть 0 ошибок
-./make.sh format      # ruff format + auto-fix
-./make.sh type-check  # mypy (ignore-missing-imports)
+uv run ruff check src tests    # должно быть 0 ошибок
+uv run ruff format src tests   # auto-fix
+uv run mypy src                # типы (блокирующий гейт в CI)
 ```
 
 ---
@@ -888,7 +853,7 @@ uv run pytest tests/unit/mlx/ -v
 ## Структура проекта
 
 ```
-pa-merge/
+pa-clean/
 ├── src/personal_assistant/
 │   ├── config.py                      # настройки из .env (Pydantic Settings)
 │   ├── models.py                      # MailMessage, CalendarEvent, Contact
@@ -999,9 +964,8 @@ pa-merge/
 │
 ├── .env.example                       # шаблон конфигурации
 ├── pyproject.toml                     # зависимости, ruff, mypy, pytest
-├── make.sh                            # task runner (build, run, test, sync…)
-├── setup.sh                           # первичная установка (аналог make.sh build)
-└── run.sh                             # запуск сервера (аналог make.sh run)
+├── uv.lock                            # запинённые версии (darwin/arm64)
+└── .github/workflows/ci.yml           # CI — workflow_dispatch (manual only)
 ```
 
 ---
@@ -1018,12 +982,12 @@ source "$HOME/.cargo/env"
 
 **Причина 1 — Python под Rosetta** (hint: `macosx_*_x86_64` при M-чипе):
 ```bash
-rm -rf .venv && ./make.sh build
+rm -rf .venv && uv sync && (cd webui && npm install && npm run build)
 ```
 
 **Причина 2 — Python 3.14+** (hint: `cp314`):
 ```bash
-rm -rf .venv && uv venv --python 3.13 && ./make.sh build
+rm -rf .venv && uv venv --python 3.13 && uv sync && (cd webui && npm install && npm run build)
 ```
 
 **Причина 3 — Intel Mac** (hint: `x86_64`):  
@@ -1087,25 +1051,21 @@ uv run pytest tests/unit/ --tb=short
 ### WebUI не обновляется
 
 ```bash
-./make.sh webui        # пересобрать один раз
-# или
-./make.sh webui-watch  # следить за изменениями SCSS
+(cd webui && npm run build)    # пересобрать один раз
+(cd webui && npm run watch)    # следить за изменениями SCSS (если script определён)
 ```
 
 ---
 
 ## Внутренние отчёты и планы
 
-Отчёты и внутренняя документация — в папке [`docs/`](docs/):
+Внутренняя документация — в папке [`docs/`](docs/):
 
 | Файл | Содержание |
 |---|---|
 | [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) | Руководство пользователя — все вкладки UI, настройки, сценарии |
-| [`docs/SYSTEM_TESTING_REPORT.md`](docs/SYSTEM_TESTING_REPORT.md) | Отчёт о тестировании (994 passed, методология, покрытие) |
-| [`docs/QA_UX_REPORT.md`](docs/QA_UX_REPORT.md) | QA & UX аудит: все найденные и исправленные дефекты |
-| [`docs/UX_IMPROVEMENTS.md`](docs/UX_IMPROVEMENTS.md) | Детальное описание всех UX-улучшений |
-| [`docs/PLAN.md`](docs/PLAN.md) | Архитектурный план проекта |
-| [`docs/INBOX_CHAT_TESTING_PLAN.md`](docs/INBOX_CHAT_TESTING_PLAN.md) | План тестирования Inbox → Chat pipeline |
-| [`docs/ai-email-calendar-research.md`](docs/ai-email-calendar-research.md) | Исследование AI-обработки почты и календаря |
 | [`docs/FUNCTIONALITY_MAP.md`](docs/FUNCTIONALITY_MAP.md) | Карта функционала и реестр проблем (Фаза 2 аудита) |
 | [`docs/SCENARIO_TEST_PLAN.md`](docs/SCENARIO_TEST_PLAN.md) | План сценарных тестов |
+| [`docs/AUDIT_PLAN.md`](docs/AUDIT_PLAN.md) | План аудита проекта (фазы 1–7) |
+| [`docs/MIGRATION_PLAN.md`](docs/MIGRATION_PLAN.md) | План миграции pa-merge → pa-clean (Фаза 6) |
+| [`docs/ai-email-calendar-research.md`](docs/ai-email-calendar-research.md) | Исследование AI-обработки почты и календаря |

@@ -230,3 +230,30 @@ return output
     except Exception as exc:
         logger.debug(f"[calendar_writer] list_calendars failed: {exc}")
         return []
+
+
+def list_writable_calendars() -> list[str]:
+    """Return names of writable calendars only (excludes Holidays, Birthdays, etc.)."""
+    script = """\
+tell application "Calendar"
+    set result_lines to {}
+    repeat with cal in calendars
+        try
+            if writable of cal is true then
+                set end of result_lines to name of cal as string
+            end if
+        end try
+    end repeat
+end tell
+set AppleScript's text item delimiters to "\\n"
+set output to result_lines as string
+set AppleScript's text item delimiters to ""
+return output
+"""
+    try:
+        output = run_applescript(script, timeout=10)
+        names = [n.strip() for n in output.splitlines() if n.strip()]
+        return names
+    except Exception as exc:
+        logger.debug(f"[calendar_writer] list_writable_calendars failed: {exc}")
+        return []
