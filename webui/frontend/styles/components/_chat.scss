@@ -1,0 +1,1261 @@
+// =============================================================================
+// Chat tab — 3-column layout: thread list | chat | Связи panel
+// =============================================================================
+@use '../variables' as *;
+@use 'sass:color';
+
+// ── Top-level layout ──────────────────────────────────────────────────────────
+.chat {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--color-bg);
+
+  &__layout {
+    display: flex;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Col 1 — Thread list
+  // ═══════════════════════════════════════════════════════════════════════════
+  &__threads-col {
+    width: 260px;
+    min-width: 200px;
+    max-width: 300px;
+    border-right: 1px solid var(--color-border);
+    background: var(--color-surface);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  &__threads-header {
+    padding: $sp-3 $sp-4;
+    border-bottom: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 48px;
+    flex-shrink: 0;
+  }
+
+  &__threads-title {
+    font-size: $size-xs;
+    font-weight: $fw-semibold;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: .07em;
+  }
+
+  &__thread-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: $sp-1 $sp-2;
+  }
+
+  // Thread list items — rendered via JS
+  &__thread-item {
+    display: flex;
+    flex-direction: column;
+    padding: $sp-2 $sp-3;
+    border-radius: $r-md;
+    cursor: pointer;
+    transition: background $t;
+    position: relative;
+    gap: 2px;
+
+    &:hover { background: $gray-100; }
+
+    &--active {
+      background: var(--primary-light);
+
+      .chat__thread-item-title { color: var(--primary); font-weight: $fw-semibold; }
+    }
+
+    &-title {
+      font-size: $size-sm;
+      font-weight: $fw-medium;
+      color: var(--color-text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    &-meta {
+      display: flex;
+      align-items: center;
+      gap: $sp-2;
+      font-size: $size-xs;
+      color: var(--color-text-faint);
+    }
+
+    &-count {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 16px;
+      height: 16px;
+      padding: 0 4px;
+      border-radius: $r-full;
+      background: $gray-200;
+      font-size: 10px;
+      font-weight: $fw-semibold;
+      color: var(--color-text-muted);
+    }
+
+    &-time { margin-left: auto; }
+  }
+
+  &__thread-actions {
+    padding: $sp-2 $sp-3;
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    gap: $sp-1;
+    background: $gray-50;
+    flex-shrink: 0;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Col 2 — Main chat
+  // ═══════════════════════════════════════════════════════════════════════════
+  &__main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+  }
+
+  &__header {
+    padding: $sp-3 $sp-5;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface);
+    display: flex;
+    align-items: center;
+    gap: $sp-3;
+    min-height: 48px;
+    flex-shrink: 0;
+
+    &-left {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    &-breadcrumb {
+      font-size: $size-sm;
+      color: var(--color-text-muted);
+      white-space: nowrap;
+    }
+
+    &-sep {
+      font-size: $size-sm;
+      color: var(--color-text-muted);
+    }
+
+    &-title {
+      font-size: $size-sm;
+      font-weight: $fw-semibold;
+      color: var(--color-text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 200px;
+    }
+  }
+
+  // Context chips — colored pills in header showing active vault refs + mode
+  &__context-chips {
+    display: flex;
+    align-items: center;
+    gap: $sp-1;
+    flex-wrap: nowrap;
+    overflow: hidden;
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__context-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px 3px 6px;
+    border-radius: $r-full;
+    font-size: $size-xs;
+    font-weight: $fw-medium;
+    white-space: nowrap;
+    cursor: default;
+
+    // Type-specific colours
+    &--mail {
+      background: #e8f3ff;
+      color: #0066cc;
+      border: 1px solid rgba(0,102,204,.2);
+    }
+    &--calendar {
+      background: #e8f8ee;
+      color: #16a34a;
+      border: 1px solid rgba(22,163,74,.2);
+    }
+    &--doc {
+      background: #fef3e2;
+      color: #d97706;
+      border: 1px solid rgba(217,119,6,.2);
+    }
+    &--default {
+      background: var(--primary-light);
+      color: var(--primary);
+      border: 1px solid rgba(33,160,56,.2);
+    }
+
+    // Stage 4: thread context chip
+    &--thread {
+      background: #f3e8ff;
+      color: #7c3aed;
+      border: 1px solid rgba(124,58,237,.25);
+      cursor: default;
+
+      .chat__thread-chip-info {
+        font-size: 10px;
+        font-weight: $fw-bold;
+        line-height: 1;
+        width: 15px;
+        height: 15px;
+        border-radius: 50%;
+        border: 1px solid currentColor;
+        background: none;
+        cursor: pointer;
+        color: inherit;
+        opacity: .6;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        &:hover { opacity: 1; }
+      }
+      .chat__thread-chip-remove {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        border: none;
+        background: none;
+        cursor: pointer;
+        color: inherit;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        opacity: .5;
+        padding: 0;
+        &:hover { opacity: 1; }
+      }
+    }
+
+    button {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: none;
+      background: none;
+      cursor: pointer;
+      color: inherit;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      opacity: .5;
+      transition: opacity $t;
+      padding: 0;
+
+      &:hover { opacity: 1; }
+    }
+  }
+
+  &__mode-badge {
+    padding: 3px 10px;
+    border-radius: $r-full;
+    font-size: $size-xs;
+    font-weight: $fw-semibold;
+    background: #fff7e6;
+    color: #b45309;
+    border: 1px solid rgba(180,83,9,.2);
+    white-space: nowrap;
+    flex-shrink: 0;
+    text-transform: lowercase;
+    cursor: default;
+  }
+
+  &__messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: $sp-5 $sp-5 $sp-4;
+    display: flex;
+    flex-direction: column;
+    gap: $sp-4;
+    scroll-behavior: smooth;
+  }
+
+  &__welcome {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: $sp-4;
+    color: var(--color-text-muted);
+    text-align: center;
+    padding: $sp-8;
+
+    &-icon {
+      width: 56px;
+      height: 56px;
+      background: var(--primary-light);
+      border-radius: $r-xl;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      svg { width: 28px; height: 28px; color: var(--primary); }
+    }
+
+    h2 {
+      font-size: $size-xl;
+      font-weight: $fw-semibold;
+      color: var(--color-text);
+    }
+
+    p { font-size: $size-base; max-width: 380px; line-height: $lh-relaxed; }
+
+    &-chips {
+      display: flex;
+      gap: $sp-2;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-top: $sp-2;
+    }
+
+    &-chip {
+      padding: 6px 14px;
+      border-radius: $r-full;
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      font-size: $size-sm;
+      cursor: pointer;
+      transition: all $t;
+      color: var(--color-text);
+
+      &:hover { border-color: var(--primary); color: var(--primary); }
+    }
+  }
+
+  // ── Message bubbles ─────────────────────────────────────────────────────────
+  &__message {
+    display: flex;
+    gap: $sp-3;
+    max-width: 100%;
+
+    &--user {
+      flex-direction: row-reverse;
+
+      .chat__bubble {
+        background: var(--primary);
+        color: #fff;
+        border-radius: $r-lg $r-sm $r-lg $r-lg;
+      }
+    }
+
+    &--assistant .chat__bubble {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: $r-sm $r-lg $r-lg $r-lg;
+    }
+
+    &--tool .chat__bubble {
+      background: $gray-50;
+      border: 1px dashed var(--color-border);
+      border-radius: $r-md;
+      font-size: $size-sm;
+    }
+  }
+
+  &__avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: $r-full;
+    background: var(--primary-light);
+    color: var(--primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: $size-sm;
+    font-weight: $fw-bold;
+    flex-shrink: 0;
+    margin-top: 2px;
+
+    svg { width: 17px; height: 17px; }
+  }
+
+  &__bubble {
+    max-width: 680px;
+    padding: $sp-3 $sp-4;
+    font-size: $size-base;
+    line-height: $lh-relaxed;
+    box-shadow: $shadow-xs;
+
+    pre, code { font-family: $font-mono; font-size: $size-sm; }
+
+    pre {
+      background: $gray-900;
+      color: #f8f8f8;
+      padding: $sp-3 $sp-4;
+      border-radius: $r-md;
+      overflow-x: auto;
+      margin: $sp-2 0;
+    }
+
+    code:not(pre code) {
+      background: $gray-100;
+      color: $sber-danger;
+      padding: 1px 5px;
+      border-radius: $r-sm;
+    }
+
+    strong { font-weight: $fw-semibold; }
+    ul, ol { padding-left: $sp-5; margin: $sp-2 0; }
+    li { margin: 2px 0; }
+    p { margin: $sp-2 0; &:first-child { margin-top: 0; } &:last-child { margin-bottom: 0; } }
+
+    .vault-ref {
+      color: var(--primary);
+      background: var(--primary-light);
+      padding: 1px 6px;
+      border-radius: $r-sm;
+      font-size: $size-sm;
+      font-weight: $fw-medium;
+      text-decoration: none;
+      cursor: pointer;
+      transition: background $t;
+
+      &:hover { background: color.scale($sber-primary-light, $lightness: -5%); }
+    }
+  }
+
+  // Tool-call badge — shown below assistant bubbles when a tool was called
+  &__tool-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: $sp-2;
+    padding: 2px 8px;
+    border-radius: $r-full;
+    background: #f0f4ff;
+    border: 1px solid #c7d7ff;
+    color: #3b5bdb;
+    font-size: $size-xs;
+    font-weight: $fw-medium;
+    cursor: default;
+
+    svg { width: 12px; height: 12px; }
+  }
+
+  // ── Bubble action bar (copy + draft) ─────────────────────────────────────────
+  &__bubble-actions {
+    display: flex;
+    align-items: center;
+    gap: $sp-1;
+    margin-top: 4px;
+    opacity: 0;
+    transition: opacity $t;
+  }
+
+  &__message:hover &__bubble-actions {
+    opacity: 1;
+  }
+
+  &__bubble-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border: 1px solid var(--color-border);
+    border-radius: $r-full;
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    font-size: $size-xs;
+    font-weight: $fw-medium;
+    cursor: pointer;
+    transition: background $t, color $t, border-color $t;
+    white-space: nowrap;
+
+    &:hover {
+      background: var(--color-bg);
+      color: var(--color-text);
+      border-color: var(--color-border-strong, $gray-300);
+    }
+
+    &--draft {
+      color: var(--primary);
+      border-color: var(--primary-light);
+      background: var(--primary-light);
+
+      &:hover {
+        background: color.scale($sber-primary-light, $lightness: -6%);
+        border-color: var(--primary);
+      }
+    }
+  }
+
+  // ── Typing animation ─────────────────────────────────────────────────────────
+  &__typing {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+    padding: 4px 0;
+
+    span {
+      width: 6px;
+      height: 6px;
+      background: $gray-400;
+      border-radius: 50%;
+      animation: typing-dot 1.2s infinite;
+
+      &:nth-child(2) { animation-delay: .2s; }
+      &:nth-child(3) { animation-delay: .4s; }
+    }
+  }
+
+  @keyframes typing-dot {
+    0%, 60%, 100% { transform: translateY(0); opacity: .4; }
+    30%            { transform: translateY(-4px); opacity: 1; }
+  }
+
+  // ── Context refs (@chips above input) ─────────────────────────────────────
+  &__refs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: $sp-2;
+    padding: $sp-2 $sp-5 0;
+  }
+
+  &__ref-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: $sp-1;
+    padding: 3px 8px 3px 10px;
+    background: var(--primary-light);
+    border: 1px solid rgba(33,160,56,.3);
+    border-radius: $r-full;
+    font-size: $size-sm;
+    color: var(--primary);
+    font-weight: $fw-medium;
+
+    button {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: none;
+      background: none;
+      cursor: pointer;
+      color: var(--primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      opacity: .6;
+      transition: opacity $t;
+      padding: 0;
+
+      &:hover { opacity: 1; }
+    }
+  }
+
+  // ── Input area ───────────────────────────────────────────────────────────────
+  &__input-area {
+    padding: $sp-3 $sp-4 $sp-4;
+    background: var(--color-surface);
+    border-top: 1px solid var(--color-border);
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  &__input-shell {
+    border: 1.5px solid var(--color-border);
+    border-radius: $r-lg;
+    background: var(--color-bg);
+    transition: border-color $t, box-shadow $t;
+    overflow: hidden;
+
+    &:focus-within {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(33,160,56,.12);
+    }
+  }
+
+  &__input-wrap {
+    display: flex;
+    align-items: flex-end;
+    gap: $sp-1;
+    padding: $sp-2 $sp-2 $sp-2 $sp-3;
+  }
+
+  &__textarea {
+    flex: 1;
+    resize: none;
+    border: none;
+    background: transparent;
+    font-size: $size-base;
+    line-height: $lh-base;
+    color: var(--color-text);
+    min-height: 24px;
+    max-height: 160px;
+    overflow-y: auto;
+    font-family: $font-base;
+
+    &::placeholder { color: var(--color-text-faint); }
+    &:focus { outline: none; }
+  }
+
+  // Mode tab bar — below the input
+  &__mode-tabs {
+    display: flex;
+    gap: 2px;
+    padding: $sp-1 $sp-2 $sp-2;
+    border-top: 1px solid $gray-100;
+  }
+
+  &__mode-tab {
+    padding: 3px 12px;
+    border-radius: $r-full;
+    font-size: $size-xs;
+    font-weight: $fw-medium;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    border: 1px solid transparent;
+    background: none;
+    transition: all $t;
+
+    &:hover {
+      background: $gray-100;
+      color: var(--color-text);
+    }
+
+    &--active {
+      background: var(--primary-light);
+      color: var(--primary);
+      border-color: rgba(33,160,56,.25);
+    }
+  }
+
+  // Inline draft actions — "Отправить / Править / Перегенерировать"
+  &__draft-actions {
+    display: flex;
+    gap: $sp-2;
+    padding: $sp-2 $sp-4;
+    background: #f8fbff;
+    border-top: 1px dashed var(--color-border);
+    flex-wrap: wrap;
+    flex-shrink: 0;
+  }
+
+  &__draft-btn {
+    padding: 5px 14px;
+    border-radius: $r-md;
+    font-size: $size-sm;
+    font-weight: $fw-medium;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text);
+    cursor: pointer;
+    transition: background $t, color $t;
+
+    &:hover { background: $gray-100; }
+
+    &--primary {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+
+      &:hover { background: var(--primary-hover); }
+    }
+
+    &:disabled { opacity: .5; cursor: default; }
+  }
+
+  // ── Icon buttons ─────────────────────────────────────────────────────────────
+  &__icon-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: $r-md;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text-muted);
+    font-size: 15px;
+    cursor: pointer;
+    border: none;
+    background: none;
+    transition: background $t, color $t;
+    flex-shrink: 0;
+
+    svg { width: 16px; height: 16px; }
+
+    &:hover { background: $gray-100; color: var(--color-text); }
+    &--active { color: var(--primary); background: var(--primary-light); }
+
+    &--sm {
+      width: 28px;
+      height: 28px;
+      font-size: 13px;
+    }
+
+    &--circle {
+      border-radius: $r-full;
+      border: 1.5px solid var(--color-border);
+
+      &:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+    }
+
+    &--danger {
+      &:hover { background: $sber-danger-light; color: $sber-danger; }
+    }
+
+    &--muted { opacity: .6; }
+  }
+
+  &__send-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: $r-md;
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background $t, transform $t;
+    flex-shrink: 0;
+
+    svg { width: 16px; height: 16px; }
+
+    &:hover:not(:disabled) { background: var(--primary-hover); transform: scale(1.04); }
+    &:disabled { background: $gray-300; cursor: default; transform: none; }
+  }
+
+  // ── Autocomplete popups ──────────────────────────────────────────────────────
+  &__popup {
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: $sp-4;
+    right: $sp-4;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: $r-lg;
+    box-shadow: $shadow-lg;
+    z-index: $z-dropdown;
+    overflow: hidden;
+    max-height: 280px;
+    display: flex;
+    flex-direction: column;
+
+    &-header {
+      padding: $sp-2 $sp-4;
+      font-size: $size-xs;
+      font-weight: $fw-semibold;
+      color: var(--color-text-muted);
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      border-bottom: 1px solid var(--color-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+
+      kbd {
+        font-size: $size-xs;
+        background: $gray-100;
+        border: 1px solid $gray-200;
+        border-radius: $r-sm;
+        padding: 1px 5px;
+        font-family: $font-mono;
+        color: $gray-600;
+      }
+    }
+
+    &-list { overflow-y: auto; flex: 1; }
+  }
+
+  &__popup-item {
+    display: flex;
+    align-items: center;
+    gap: $sp-3;
+    padding: $sp-2 $sp-4;
+    cursor: pointer;
+    transition: background $t;
+
+    &:hover, &--active, &--focus { background: $gray-50; }
+
+    &-icon { font-size: 16px; flex-shrink: 0; width: 22px; text-align: center; }
+
+    &-body {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+
+    &-title {
+      font-size: $size-sm;
+      font-weight: $fw-medium;
+      color: var(--color-text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    &-section, &-meta {
+      font-size: $size-xs;
+      color: var(--primary);
+      opacity: .8;
+    }
+
+    &-snippet {
+      font-size: $size-xs;
+      color: var(--color-text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    &-shortcut {
+      font-size: $size-xs;
+      color: $gray-400;
+      background: $gray-100;
+      border-radius: $r-sm;
+      padding: 2px 6px;
+      flex-shrink: 0;
+    }
+
+    &-empty {
+      padding: $sp-5;
+      text-align: center;
+      font-size: $size-sm;
+      color: var(--color-text-muted);
+    }
+  }
+
+  // ── Context panel (collapsible) ───────────────────────────────────────────────
+  &__context {
+    margin: $sp-2 $sp-4 0;
+    padding: $sp-3 $sp-4;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: $r-lg;
+    font-size: $size-sm;
+
+    &-header {
+      font-weight: $fw-semibold;
+      color: var(--color-text-muted);
+      margin-bottom: $sp-2;
+      font-size: $size-xs;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    &-body {
+      display: flex;
+      flex-wrap: wrap;
+      gap: $sp-2;
+    }
+
+    &-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: $r-full;
+      background: var(--primary-light);
+      color: var(--primary);
+      font-size: $size-xs;
+      font-weight: $fw-medium;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Col 3 — Связи (related entities) panel
+  // ═══════════════════════════════════════════════════════════════════════════
+  &__related-col {
+    width: 280px;
+    min-width: 220px;
+    max-width: 320px;
+    border-left: 1px solid var(--color-border);
+    background: var(--color-surface);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  &__related-header {
+    padding: $sp-3 $sp-4;
+    border-bottom: 1px solid var(--color-border);
+    font-size: $size-xs;
+    font-weight: $fw-semibold;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  &__related-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: $sp-2;
+    display: flex;
+    flex-direction: column;
+    gap: $sp-1;
+  }
+
+  &__related-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: $sp-2;
+    padding: $sp-8 $sp-4;
+    text-align: center;
+    color: var(--color-text-faint);
+    font-size: $size-sm;
+    flex: 1;
+
+    svg { width: 28px; height: 28px; opacity: .3; }
+  }
+
+  &__related-section {
+    padding: $sp-2 $sp-2 $sp-1;
+    font-size: $size-xs;
+    font-weight: $fw-semibold;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+  }
+
+  &__related-card {
+    display: flex;
+    align-items: flex-start;
+    gap: $sp-2;
+    padding: $sp-2 $sp-3;
+    border-radius: $r-md;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    cursor: pointer;
+    transition: all $t;
+    font-size: $size-sm;
+
+    &:hover {
+      border-color: var(--primary);
+      background: var(--primary-light);
+    }
+
+    &-icon {
+      font-size: 15px;
+      flex-shrink: 0;
+      margin-top: 1px;
+      width: 20px;
+      text-align: center;
+    }
+
+    &-body {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+
+    &-title {
+      font-weight: $fw-medium;
+      color: var(--color-text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    &-sub {
+      font-size: $size-xs;
+      color: var(--color-text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+
+  // ── Tool options bar (legacy) ─────────────────────────────────────────────
+  &__tool-bar {
+    display: flex;
+    align-items: center;
+    gap: $sp-3;
+    padding: $sp-2 $sp-4;
+    background: $gray-50;
+    border-top: 1px solid var(--color-border);
+    font-size: $size-sm;
+    color: var(--color-text-muted);
+
+    label { font-weight: $fw-medium; }
+
+    select {
+      padding: 3px 8px;
+      border: 1px solid var(--color-border);
+      border-radius: $r-sm;
+      font-size: $size-sm;
+      background: var(--color-surface);
+      color: var(--color-text);
+    }
+  }
+
+  // ── Legacy aliases (kept for backward compat with old JS) ─────────────────
+  &__history {
+    // Maps to threads-col functionality — kept so old class refs still compile
+    &-item { @extend .chat__thread-item; }
+    &-item--active { @extend .chat__thread-item--active; }
+    &-item-title { @extend .chat__thread-item-title; }
+    &-item-sub { @extend .chat__thread-item-meta; }
+  }
+
+  &__mode-btn {
+    @extend .chat__mode-tab;
+    &--active { @extend .chat__mode-tab--active; }
+  }
+}
+
+// ── Inline draft panel (dynamically injected via JS) ──────────────────────────
+.dp {
+  margin-top: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: $r-lg;
+  background: var(--color-surface);
+  box-shadow: $shadow-sm;
+  overflow: hidden;
+  font-size: $size-sm;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: $sp-2 $sp-4;
+    background: #f8fbff;
+    border-bottom: 1px solid var(--color-border);
+    font-weight: $fw-semibold;
+    color: var(--color-text);
+  }
+
+  &__close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--color-text-muted);
+    font-size: 18px;
+    line-height: 1;
+    padding: 0 4px;
+
+    &:hover { color: var(--color-text); }
+  }
+
+  &__fields {
+    padding: $sp-3 $sp-4 $sp-2;
+    display: flex;
+    flex-direction: column;
+    gap: $sp-2;
+  }
+
+  &__row { display: flex; align-items: flex-start; gap: $sp-2; }
+
+  &__label {
+    width: 56px;
+    flex-shrink: 0;
+    padding-top: 5px;
+    font-size: $size-xs;
+    color: var(--color-text-muted);
+    text-align: right;
+  }
+
+  &__input {
+    flex: 1;
+    padding: 4px 8px;
+    border: 1px solid var(--color-border);
+    border-radius: $r-sm;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-size: $size-sm;
+    font-family: $font-base;
+    outline: none;
+
+    &:focus { border-color: var(--primary); }
+  }
+
+  &__body {
+    display: block;
+    width: calc(100% - #{$sp-8});
+    margin: $sp-2 $sp-4;
+    min-height: 120px;
+    max-height: 320px;
+    padding: $sp-2 $sp-3;
+    border: 1px solid var(--color-border);
+    border-radius: $r-sm;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-size: $size-sm;
+    font-family: $font-base;
+    line-height: $lh-relaxed;
+    resize: vertical;
+    outline: none;
+
+    &:focus { border-color: var(--primary); }
+  }
+
+  &__actions {
+    display: flex;
+    gap: $sp-2;
+    padding: $sp-2 $sp-4 $sp-3;
+    flex-wrap: wrap;
+  }
+
+  &__btn {
+    padding: 5px 14px;
+    border-radius: $r-md;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-size: $size-sm;
+    font-family: $font-base;
+    cursor: pointer;
+    transition: background $t, color $t;
+
+    &:hover { background: $gray-100; }
+
+    &--primary {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+
+      &:hover { filter: brightness(1.08); }
+    }
+
+    &:disabled { opacity: .5; cursor: default; }
+  }
+
+  &__status {
+    font-size: $size-xs;
+    color: var(--color-text-muted);
+    padding: 0 $sp-4 $sp-2;
+    min-height: 18px;
+  }
+
+  // ── Stage 4: Thread Drawer ──────────────────────────────────────────────────
+  &__thread-drawer {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: $sp-3;
+    right: $sp-3;
+    max-height: 360px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: $r-lg;
+    box-shadow: 0 8px 24px rgba(0,0,0,.12);
+    z-index: 200;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: fadeIn .15s ease;
+
+    &-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: $sp-2 $sp-3;
+      border-bottom: 1px solid var(--color-border);
+      background: #f9f7ff;
+      font-size: $size-sm;
+
+      strong { color: #7c3aed; }
+    }
+
+    &-close {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 16px;
+      color: var(--color-text-muted);
+      line-height: 1;
+      padding: 0 4px;
+      &:hover { color: var(--color-text); }
+    }
+
+    &-body {
+      overflow-y: auto;
+      padding: $sp-2 $sp-3 $sp-3;
+      flex: 1;
+    }
+  }
+
+  &__thread-facts {
+    background: #fffbea;
+    border: 1px solid #fde68a;
+    border-radius: $r-md;
+    padding: $sp-2 $sp-3;
+    margin-bottom: $sp-2;
+    font-size: $size-xs;
+
+    strong { color: #92400e; }
+
+    ul {
+      margin: 4px 0 0 $sp-3;
+      padding: 0;
+      li { color: var(--color-text); margin-bottom: 2px; }
+    }
+  }
+
+  &__thread-msgs {
+    display: flex;
+    flex-direction: column;
+    gap: $sp-2;
+  }
+
+  &__thread-msg {
+    border-radius: $r-md;
+    padding: $sp-2 $sp-3;
+    font-size: $size-xs;
+
+    &--incoming {
+      background: #f0f4ff;
+      border-left: 3px solid #6366f1;
+    }
+    &--outgoing {
+      background: #f0fdf4;
+      border-left: 3px solid #22c55e;
+      margin-left: $sp-4;
+    }
+
+    &-meta {
+      font-size: 10px;
+      color: var(--color-text-muted);
+      margin-bottom: 4px;
+      font-weight: $fw-medium;
+    }
+
+    &-body {
+      color: var(--color-text);
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+  }
+}

@@ -1,0 +1,362 @@
+// =============================================================================
+// Settings tab
+// =============================================================================
+@use '../variables' as *;
+
+.settings {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+
+  // ── Section card ──────────────────────────────────────────────────────
+  &__section {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: $r-lg;
+    padding: $sp-5;
+    margin-bottom: $sp-4;
+    box-shadow: $shadow-xs;
+  }
+
+  &__section-title {
+    font-size: $size-xs;
+    font-weight: $fw-semibold;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    margin-bottom: $sp-4;
+    padding-bottom: $sp-3;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  // ── Row: label + control ───────────────────────────────────────────────
+  &__row {
+    display: flex;
+    align-items: flex-start;
+    gap: $sp-4;
+    padding: $sp-3 0;
+    border-bottom: 1px solid var(--color-border);
+
+    &:last-child { border-bottom: none; }
+  }
+
+  &__label {
+    width: 180px;
+    min-width: 180px;
+    font-size: $size-sm;
+    font-weight: $fw-medium;
+    color: var(--color-text);
+    padding-top: 7px;
+    line-height: $lh-tight;
+  }
+
+  &__control {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: $sp-2;
+  }
+
+  // ── Form controls ─────────────────────────────────────────────────────
+  &__input {
+    width: 100%;
+    padding: 7px $sp-3;
+    border: 1px solid var(--color-border);
+    border-radius: $r-md;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-size: $size-sm;
+    font-family: $font-base;
+    transition: border-color $t, box-shadow $t;
+    outline: none;
+
+    &:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(33,160,56,.12);
+    }
+  }
+
+  &__textarea {
+    width: 100%;
+    padding: $sp-3;
+    border: 1px solid var(--color-border);
+    border-radius: $r-md;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-size: $size-sm;
+    font-family: $font-mono;
+    line-height: $lh-relaxed;
+    resize: vertical;
+    outline: none;
+    transition: border-color $t, box-shadow $t;
+
+    &:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(33,160,56,.12);
+    }
+  }
+
+  &__select {
+    padding: 7px $sp-3;
+    border: 1px solid var(--color-border);
+    border-radius: $r-md;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-size: $size-sm;
+    font-family: $font-base;
+    cursor: pointer;
+    outline: none;
+    transition: border-color $t;
+
+    &:focus { border-color: var(--primary); }
+  }
+
+  // ── Toggle switch ─────────────────────────────────────────────────────
+  &__toggle {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: $sp-2;
+    cursor: pointer;
+
+    input[type="checkbox"] {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+      height: 0;
+
+      &:checked + .settings__toggle-track {
+        background: var(--primary);
+      }
+
+      &:checked + .settings__toggle-track .settings__toggle-thumb {
+        transform: translateX(18px);
+      }
+    }
+
+    &-track {
+      width: 38px;
+      height: 20px;
+      background: $gray-300;
+      border-radius: $r-full;
+      transition: background $t;
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    &-thumb {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 16px;
+      height: 16px;
+      background: #fff;
+      border-radius: $r-full;
+      box-shadow: $shadow-xs;
+      transition: transform $t;
+    }
+
+    &-label {
+      font-size: $size-sm;
+      color: var(--color-text);
+    }
+  }
+
+  // ── Buttons ───────────────────────────────────────────────────────────
+  &__btn {
+    padding: 7px $sp-4;
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    border-radius: $r-md;
+    font-size: $size-sm;
+    font-weight: $fw-medium;
+    font-family: $font-base;
+    cursor: pointer;
+    transition: background $t, transform $t-fast;
+
+    &:hover   { background: var(--primary-hover); }
+    &:active  { transform: scale(.97); }
+
+    &--secondary {
+      background: var(--color-bg);
+      color: var(--color-text);
+      border: 1px solid var(--color-border);
+
+      &:hover { background: var(--color-border); }
+    }
+  }
+
+  // ── Status badges ─────────────────────────────────────────────────────
+  &__badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px $sp-2;
+    border-radius: $r-full;
+    font-size: $size-xs;
+    font-weight: $fw-medium;
+
+    &--ok      { background: $sber-success-light; color: $sber-primary; }
+    &--error   { background: $sber-danger-light;  color: $sber-danger;  }
+    &--warning { background: $sber-warning-light; color: $sber-warning; }
+  }
+
+  // ── Eisenhower 2x2 matrix ──────────────────────────────────────────────
+  &__matrix {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: $sp-3;
+    margin-top: $sp-3;
+  }
+
+  &__matrix-cell {
+    border-radius: $r-lg;
+    padding: $sp-4;
+    min-height: 160px;
+    display: flex;
+    flex-direction: column;
+    gap: $sp-2;
+    border: 1px solid transparent;
+    transition: border-color $t;
+
+    &--q1 { background: #FFF1F0; border-color: #FFCCC7; }
+    &--q2 { background: #F0F9EB; border-color: #B7EB8F; }
+    &--q3 { background: #FFFBE6; border-color: #FFE58F; }
+    &--q4 { background: $gray-100; border-color: $gray-200; }
+  }
+
+  &__matrix-cell-title {
+    font-size: $size-xs;
+    font-weight: $fw-semibold;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--color-text-muted);
+    margin-bottom: $sp-2;
+  }
+
+  &__matrix-cell-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  // ── Souls editor ──────────────────────────────────────────────────────
+  &__souls-editor {
+    width: 100%;
+    padding: $sp-4;
+    border: 1px solid var(--color-border);
+    border-radius: $r-lg;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-size: $size-sm;
+    font-family: $font-mono;
+    line-height: $lh-relaxed;
+    resize: vertical;
+    outline: none;
+    transition: border-color $t, box-shadow $t;
+    min-height: 300px;
+
+    &:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(33,160,56,.12);
+    }
+  }
+
+  // ── Sub-tabs ──────────────────────────────────────────────────────────
+  &__tabs {
+    display: flex;
+    gap: 2px;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: $r-lg;
+    padding: 4px;
+    margin-bottom: $sp-5;
+  }
+
+  &__tab-btn {
+    flex: 1;
+    padding: 6px $sp-3;
+    border: none;
+    border-radius: $r-md;
+    background: none;
+    color: var(--color-text-muted);
+    font-size: $size-sm;
+    font-weight: $fw-medium;
+    font-family: $font-base;
+    cursor: pointer;
+    transition: background $t, color $t;
+    white-space: nowrap;
+
+    &:hover:not(&--active) {
+      background: var(--color-surface);
+      color: var(--color-text);
+    }
+
+    &--active {
+      background: var(--color-surface);
+      color: var(--primary);
+      font-weight: $fw-semibold;
+      box-shadow: $shadow-xs;
+    }
+  }
+}
+
+// ── Operation progress bar (classify, index, reload) ─────────────────────────
+.op-progress-wrap {
+  // container — populated by JS
+}
+
+.op-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  font-size: 13px;
+
+  &__bar {
+    height: 4px;
+    border-radius: 99px;
+    background: var(--color-border);
+    overflow: hidden;
+  }
+
+  &__fill {
+    height: 100%;
+    border-radius: 99px;
+    background: var(--primary);
+
+    &--indeterminate {
+      width: 40%;
+      animation: op-slide 1.2s ease-in-out infinite;
+    }
+  }
+
+  &__meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+
+  &__step  { color: var(--color-text-muted); flex: 1; }
+  &__elapsed { color: var(--color-text-faint); white-space: nowrap; font-size: 12px; }
+
+  &--done {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+}
+
+@keyframes op-slide {
+  0%   { transform: translateX(-150%); }
+  50%  { transform: translateX(100%); }
+  100% { transform: translateX(350%); }
+}

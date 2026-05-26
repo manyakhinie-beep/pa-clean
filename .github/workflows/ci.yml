@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-test:
+    # mlx-lm ships wheels only for macOS arm64, and uv.lock is pinned to
+    # darwin/arm64 — so CI must run on an Apple-Silicon runner. macos-14 is arm64.
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync
+
+      # ruff is a hard gate: the cleanup pass brought src + tests to zero findings.
+      - name: Lint (ruff)
+        run: uv run ruff check src tests
+
+      # mypy is a hard gate: the type-check pass brought src to zero errors.
+      - name: Type check (mypy)
+        run: uv run mypy src
+
+      # The real gate: unit tests must be green. They run without MLX / Apple
+      # apps by design (see tests/conftest.py).
+      - name: Unit tests
+        run: uv run pytest -m unit --cov=src --cov-report=term-missing --cov-report=html
+
+      # In-process TestClient e2e tests (no browser, MLX mocked).
+      - name: E2E tests
+        run: uv run pytest -m e2e
+
+      - name: Upload coverage HTML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html
+          path: htmlcov/
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # Scenario / integration tests (real MLX model + Apple Mail/Calendar) cannot
+  # run on GitHub-hosted runners: there is no local model and no TCC/Automation
+  # permissions. Run them on a self-hosted macOS machine, e.g.:
+  #
+  #   PA_MLX_MODEL_PATH=/path/to/mlx-model uv run pytest -m "scenario and mlx"
+  #   uv run pytest -m "scenario and mail"
+  #   uv run pytest -m "scenario and calendar"
+  #
+  # Use PA_E2E_TEST_MODE=true to suppress real side effects where supported.
+  # ---------------------------------------------------------------------------

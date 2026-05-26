@@ -1218,6 +1218,18 @@ async def classify_llm_batch(background_tasks: BackgroundTasks):
         batch_llm_classify_vault,
     )
 
+    # Test mode: batch_llm_classify_vault iterates the entire vault and calls
+    # the MLX engine — TestClient awaits BackgroundTasks inline.
+    if cfg.e2e_test_mode:
+        return {
+            "status": "started",
+            "threshold": 0.0,
+            "batch_size": 0,
+            "engine_ready": False,
+            "message": "e2e_test_mode: пропущено",
+            "e2e": True,
+        }
+
     vault = cfg.vault_path
     if not vault.exists():
         raise HTTPException(503, "Vault не найден")
@@ -2500,6 +2512,12 @@ class ModelPullBody(BaseModel):
 @router.post("/model/pull")
 async def model_pull(body: ModelPullBody, background_tasks: BackgroundTasks):
     """Начать загрузку модели в фоне."""
+    # Test mode: refuse to download multi-GB model weights from HuggingFace.
+    # TestClient would otherwise await the background pull inline.
+    from personal_assistant.config import settings as _cfg
+    if _cfg.e2e_test_mode:
+        return {"ok": False, "message": "e2e_test_mode: загрузка пропущена", "e2e": True}
+
     repo = body.repo
     known_repos = {m["repo"] for m in QWEN_MODELS}
     if repo not in known_repos:

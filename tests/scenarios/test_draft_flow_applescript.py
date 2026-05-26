@@ -76,8 +76,26 @@ def _require_mail_applescript_access():
         pytest.skip(f"Draft AppleScript scenario skipped: {reason}")
     yield
 
+
+@pytest.fixture(autouse=True)
+def _disable_e2e_test_mode(monkeypatch):
+    """The root conftest forces ``e2e_test_mode=True`` for the whole session so
+    hermetic tests never touch real Mail.app. These are *live* tests — they
+    must hit the real AppleScript path, including via the ``/save-draft-mail``
+    endpoint. Disable the short-circuit for every test in this module."""
+    from personal_assistant.config import settings
+
+    monkeypatch.setattr(settings, "e2e_test_mode", False)
+
+
 # Unique marker embedded in every test draft subject to make cleanup safe
 _MARKER = "pa-merge-draft-test"
+
+# macOS Mail returns the *display* name of the Drafts mailbox, which is
+# localized (e.g. "Черновики" on Russian systems). Match any of these. Extend
+# this tuple if a new locale shows up.
+_DRAFTS_MAILBOX_NAMES = ("Drafts", "Черновики", "Brouillons", "Entwürfe", "Borradores")
+_DRAFTS_MATCH = " or ".join(f'name of mbox is "{n}"' for n in _DRAFTS_MAILBOX_NAMES)
 
 
 # ---------------------------------------------------------------------------
@@ -110,7 +128,7 @@ tell application "Mail"
     repeat with anAccount in every account
         try
             repeat with mbox in mailboxes of anAccount
-                if name of mbox is "Drafts" then
+                if ({_DRAFTS_MATCH}) then
                     repeat with msg in (messages of mbox)
                         if (subject of msg) contains "{_MARKER}" then
                             set cnt to cnt + 1
@@ -140,7 +158,7 @@ tell application "Mail"
     repeat with anAccount in every account
         try
             repeat with mbox in mailboxes of anAccount
-                if name of mbox is "Drafts" then
+                if ({_DRAFTS_MATCH}) then
                     repeat with msg in (messages of mbox)
                         if (subject of msg) contains "{_MARKER}" then
                             set end of subjects to (subject of msg) as string
@@ -174,7 +192,7 @@ tell application "Mail"
     repeat with anAccount in every account
         try
             repeat with mbox in mailboxes of anAccount
-                if name of mbox is "Drafts" then
+                if ({_DRAFTS_MATCH}) then
                     set toDelete to {{}}
                     repeat with msg in (messages of mbox)
                         if (subject of msg) contains "{_MARKER}" then

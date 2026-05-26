@@ -1,0 +1,1341 @@
+// =============================================================================
+// Inbox — 3-column layout: list | detail | assistant
+// Design reference: Personal Assistant workspace.pdf
+// =============================================================================
+@use '../variables' as *;
+
+// ── Layout ────────────────────────────────────────────────────────────────────
+.inbox {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+  background: var(--color-bg);
+
+  &__list-col {
+    width: 310px;
+    min-width: 260px;
+    display: flex;
+    flex-direction: column;
+    background: var(--color-surface);
+    border-right: 1px solid var(--color-border);
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  &__detail-col {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-right: 1px solid var(--color-border);
+  }
+
+  &__assistant-col {
+    width: 280px;
+    min-width: 240px;
+    display: flex;
+    flex-direction: column;
+    background: var(--color-surface);
+    overflow: hidden;
+    flex-shrink: 0;
+    overflow-y: auto;
+  }
+
+  // ── List header ─────────────────────────────────────────────────────────
+  &__header {
+    padding: 14px $sp-4 10px;
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+  }
+
+  &__header-top {
+    display: flex;
+    align-items: center;
+    gap: $sp-2;
+    margin-bottom: 6px;
+  }
+
+  &__header-title {
+    font-size: $size-md;
+    font-weight: $fw-bold;
+    color: var(--color-text);
+    flex: 1;
+  }
+
+  &__header-stats {
+    font-size: $size-xs;
+    color: var(--color-text-muted);
+  }
+
+  &__header-pills {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  // ── Filter tabs ──────────────────────────────────────────────────────────
+  &__filters {
+    display: flex;
+    gap: 2px;
+    padding: $sp-2 $sp-3;
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+  }
+
+  // ── Shortcuts bar ────────────────────────────────────────────────────────
+  &__shortcuts {
+    display: flex;
+    align-items: center;
+    gap: $sp-4;
+    padding: 6px $sp-4;
+    border-top: 1px solid var(--color-border);
+    background: var(--color-surface);
+    flex-shrink: 0;
+    font-size: $size-xs;
+    color: var(--color-text-faint);
+    flex-wrap: wrap;
+
+    kbd {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 16px;
+      height: 16px;
+      padding: 0 4px;
+      background: var(--color-bg);
+      border: 1px solid var(--color-border);
+      border-radius: $r-sm;
+      font-family: $font-mono;
+      font-size: 10px;
+      font-weight: $fw-semibold;
+      color: var(--color-text-muted);
+      margin-right: 2px;
+    }
+  }
+}
+
+// ── Pill badges (urgent / important counts) ───────────────────────────────────
+.ib-pill {
+  padding: 3px 10px;
+  border-radius: $r-full;
+  font-size: $size-xs;
+  font-weight: $fw-semibold;
+  border: none;
+  cursor: default;
+
+  &--urgent    { background: #FFF0F0; color: #DC2626; }
+  &--important { background: #FFFBEB; color: #D97706; }
+}
+
+// ── Filter tab buttons ────────────────────────────────────────────────────────
+.ib-filter-tab {
+  padding: 4px $sp-3;
+  border: none;
+  border-radius: $r-md;
+  font-size: $size-sm;
+  font-weight: $fw-medium;
+  color: var(--color-text-muted);
+  background: none;
+  cursor: pointer;
+  transition: background $t, color $t;
+
+  &:hover        { background: var(--color-bg); color: var(--color-text); }
+  &--active      { background: var(--primary-light); color: var(--primary); font-weight: $fw-semibold; }
+}
+
+// ── Inbox list ────────────────────────────────────────────────────────────────
+#ib-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: $sp-1 0;
+}
+
+.ib-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: background $t-fast, border-color $t-fast;
+  position: relative;
+
+  &:hover               { background: var(--color-bg); }
+  &--active             { background: var(--color-nav-active); border-left-color: var(--primary); }
+  &--urgent             { border-left-color: #DC2626 !important; }
+  &--active.ib-item--urgent { background: #fff5f5; }
+
+  &--read {
+    .ib-item-sender,
+    .ib-item-subject { font-weight: $fw-normal; color: var(--color-text-muted); }
+  }
+
+  &-check {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  &-body  { flex: 1; min-width: 0; }
+  &-top   { display: flex; align-items: baseline; gap: 6px; margin-bottom: 2px; }
+
+  &-sender {
+    font-size: $size-base;
+    font-weight: $fw-semibold;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+  }
+
+  &-role {
+    font-size: $size-xs;
+    color: var(--color-text-faint);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 80px;
+  }
+
+  &-time {
+    font-size: $size-xs;
+    color: var(--color-text-faint);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  &-subject {
+    font-size: $size-sm;
+    font-weight: $fw-medium;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 4px;
+  }
+
+  &-type-icon {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    opacity: .5;
+  }
+
+  &-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+}
+
+// Checkbox custom styling
+.ib-checkbox {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.ib-checkbox-ui {
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--color-border);
+  border-radius: $r-sm;
+  display: block;
+  flex-shrink: 0;
+  transition: border-color $t-fast;
+  .ib-item:hover & { border-color: var(--primary); }
+}
+
+// ── Avatar ────────────────────────────────────────────────────────────────────
+.ib-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  color: #fff;
+  font-size: $size-xs;
+  font-weight: $fw-bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+
+  &--sm {
+    width: 24px;
+    height: 24px;
+    border-radius: 7px;
+    font-size: 10px;
+  }
+}
+
+// ── Tag badges ────────────────────────────────────────────────────────────────
+.ib-tag {
+  padding: 1px 6px;
+  border-radius: $r-full;
+  font-size: 10px;
+  font-weight: $fw-semibold;
+  white-space: nowrap;
+
+  &--tag-urgent    { background: #FFF0F0; color: #DC2626; }
+  &--tag-important { background: #FFFBEB; color: #D97706; }
+  &--tag-finance   { background: #EFF6FF; color: #2563EB; }
+  &--tag-meeting   { background: #F0FDF4; color: #16A34A; }
+}
+
+// ── Empty / Loading ───────────────────────────────────────────────────────────
+.ib-list-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: $sp-3;
+  padding: $sp-8;
+  color: var(--color-text-muted);
+  font-size: $size-sm;
+  text-align: center;
+
+  svg { opacity: .3; }
+
+  small {
+    font-size: $size-xs;
+    color: var(--color-text-faint);
+  }
+}
+
+@keyframes ib-spin {
+  to { transform: rotate(360deg); }
+}
+
+.ib-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--primary);
+  border-radius: $r-full;
+  animation: ib-spin .7s linear infinite;
+  margin: 0 auto $sp-2;
+}
+
+// ── Detail panel ──────────────────────────────────────────────────────────────
+.ib-detail-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: $sp-3;
+  color: var(--color-text-faint);
+  font-size: $size-sm;
+  padding: $sp-8;
+
+  svg { opacity: .2; }
+}
+
+.ib-detail-header {
+  padding: $sp-5 $sp-6 $sp-4;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.ib-detail-tags    { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: $sp-2; }
+.ib-detail-subject {
+  font-size: $size-xl;
+  font-weight: $fw-bold;
+  color: var(--color-text);
+  line-height: $lh-tight;
+  margin-bottom: $sp-3;
+}
+
+.ib-detail-meta {
+  display: flex;
+  align-items: center;
+  gap: $sp-2;
+  flex-wrap: wrap;
+}
+
+.ib-detail-meta-info { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; }
+.ib-detail-sender    { font-size: $size-sm; font-weight: $fw-semibold; color: var(--color-text); }
+.ib-detail-role      { font-size: $size-sm; color: var(--color-text-muted); }
+.ib-detail-time      { font-size: $size-sm; color: var(--color-text-muted); }
+
+.ib-detail-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: $sp-5 $sp-6;
+  font-size: $size-base;
+  line-height: $lh-relaxed;
+  color: var(--color-text);
+
+  p              { margin: $sp-2 0; }
+  p:first-child  { margin-top: 0; }
+  p:last-child   { margin-bottom: 0; }
+  strong         { font-weight: $fw-semibold; }
+}
+
+// ── Assistant panel ───────────────────────────────────────────────────────────
+.ib-assistant-header {
+  display: flex;
+  align-items: center;
+  gap: $sp-2;
+  padding: 14px $sp-4;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.ib-assistant-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: $r-md;
+  background: var(--primary);
+  color: #fff;
+  font-size: $size-xs;
+  font-weight: $fw-bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ib-assistant-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.ib-assistant-name {
+  font-size: $size-sm;
+  font-weight: $fw-semibold;
+  color: var(--color-text);
+}
+
+.ib-assistant-idle {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: $sp-6;
+  font-size: $size-sm;
+  color: var(--color-text-faint);
+  text-align: center;
+}
+
+.ib-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: $r-full;
+  font-size: 10px;
+  font-weight: $fw-semibold;
+
+  &--ready { background: #F0FDF4; color: #16A34A; }
+  &--busy  { background: #FFF7ED; color: #EA580C; }
+}
+
+// ── Section headers ───────────────────────────────────────────────────────────
+.ib-section {
+  padding: $sp-3 $sp-4 $sp-2;
+  border-bottom: 1px solid var(--color-border);
+
+  &:last-child { border-bottom: none; }
+}
+
+.ib-section-label {
+  font-size: 10px;
+  font-weight: $fw-semibold;
+  color: var(--color-text-faint);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  margin-bottom: $sp-2;
+}
+
+// ── Summary ───────────────────────────────────────────────────────────────────
+.ib-summary {
+  font-size: $size-sm;
+  line-height: $lh-relaxed;
+  color: var(--color-text);
+  padding-bottom: $sp-1;
+}
+
+.ib-summary-loading {
+  color: var(--color-text-faint);
+  font-style: italic;
+}
+
+// ── Actions ───────────────────────────────────────────────────────────────────
+.ib-actions { display: flex; flex-direction: column; gap: 2px; }
+
+.ib-action {
+  display: flex;
+  align-items: center;
+  gap: $sp-2;
+  padding: $sp-2 $sp-2;
+  border: none;
+  background: none;
+  border-radius: $r-md;
+  cursor: pointer;
+  transition: background $t-fast, color $t-fast;
+  width: 100%;
+  text-align: left;
+  color: var(--color-text-muted);
+  font-size: $size-sm;
+
+  &:hover {
+    background: var(--color-bg);
+    color: var(--color-text);
+
+    .ib-action-icon { opacity: 1; }
+  }
+
+  &-icon {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    opacity: .6;
+  }
+
+  span { flex: 1; }
+
+  kbd {
+    font-size: 10px;
+    padding: 1px 5px;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: $r-sm;
+    font-family: $font-mono;
+    color: var(--color-text-faint);
+    min-width: 18px;
+    text-align: center;
+  }
+}
+
+// ── Related ───────────────────────────────────────────────────────────────────
+.ib-related { display: flex; flex-direction: column; gap: 4px; }
+
+.ib-related-item {
+  display: flex;
+  align-items: center;
+  gap: $sp-2;
+  font-size: $size-xs;
+  color: var(--color-text-muted);
+}
+
+.ib-related-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: $r-full;
+  flex-shrink: 0;
+  background: var(--color-border);
+
+  &--mail    { background: var(--primary); }
+  &--meeting { background: #2563EB; }
+}
+
+// ── Unread dot ────────────────────────────────────────────────────────────────
+.ib-unread-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: $r-full;
+  background: var(--primary);
+  flex-shrink: 0;
+  align-self: center;
+}
+
+// ── Urgency filter tabs styling ───────────────────────────────────────────────
+.ib-filter-tab {
+  &--urgent {
+    color: #DC2626;
+    &.ib-filter-tab--active {
+      background: #FFF0F0;
+      color: #DC2626;
+    }
+  }
+  &--important {
+    color: #D97706;
+    &.ib-filter-tab--active {
+      background: #FFFBEB;
+      color: #D97706;
+    }
+  }
+}
+
+// ── Suggestions ───────────────────────────────────────────────────────────────
+.ib-suggest-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: $sp-2;
+}
+
+.ib-suggest-action {
+  padding: $sp-1 $sp-3;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: $r-md;
+  font-size: $size-sm;
+  color: var(--color-text);
+  cursor: pointer;
+  text-align: left;
+  transition: background $t-fast, border-color $t-fast;
+
+  &:hover {
+    background: var(--primary-light);
+    border-color: var(--primary);
+    color: var(--primary);
+  }
+}
+
+.ib-tag-hints {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: $sp-1;
+}
+
+.ib-tag-hints-label {
+  font-size: $size-xs;
+  color: var(--color-text-faint);
+  flex-shrink: 0;
+}
+
+.ib-tag-hint {
+  padding: 2px 8px;
+  background: var(--color-bg);
+  border: 1px dashed var(--color-border);
+  border-radius: $r-full;
+  font-size: $size-xs;
+  font-weight: $fw-medium;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background $t-fast, border-color $t-fast, color $t-fast;
+
+  &:hover {
+    background: var(--primary-light);
+    border-color: var(--primary);
+    border-style: solid;
+    color: var(--primary);
+  }
+}
+
+// ── Tag editor ────────────────────────────────────────────────────────────────
+.ib-tag-editor {
+  display: flex;
+  flex-direction: column;
+  gap: $sp-2;
+}
+
+.ib-tag-current {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 22px;
+}
+
+.ib-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  background: var(--primary-light);
+  border-radius: $r-full;
+  font-size: $size-xs;
+  font-weight: $fw-medium;
+  color: var(--primary);
+}
+
+.ib-tag-remove {
+  background: none;
+  border: none;
+  color: var(--primary);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0;
+  opacity: .7;
+  transition: opacity $t-fast;
+
+  &:hover { opacity: 1; }
+}
+
+.ib-tag-input-row {
+  display: flex;
+  gap: 4px;
+}
+
+.ib-tag-input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px $sp-2;
+  border: 1px solid var(--color-border);
+  border-radius: $r-md;
+  font-size: $size-sm;
+  color: var(--color-text);
+  background: var(--color-bg);
+  outline: none;
+  transition: border-color $t-fast;
+
+  &:focus { border-color: var(--primary); }
+  &::placeholder { color: var(--color-text-faint); }
+}
+
+.ib-tag-add-btn {
+  padding: 4px 10px;
+  background: var(--primary);
+  border: none;
+  border-radius: $r-md;
+  color: #fff;
+  font-size: $size-sm;
+  font-weight: $fw-semibold;
+  cursor: pointer;
+  transition: opacity $t-fast;
+  flex-shrink: 0;
+
+  &:hover { opacity: .85; }
+}
+
+// ── Project selector ──────────────────────────────────────────────────────────
+.ib-project-selector {
+  display: flex;
+  flex-direction: column;
+  gap: $sp-2;
+}
+
+.ib-project-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: #EEF2FF;
+  border-radius: $r-full;
+  font-size: $size-xs;
+  font-weight: $fw-semibold;
+  color: #4338CA;
+  width: fit-content;
+}
+
+.ib-project-select {
+  width: 100%;
+  padding: 5px $sp-2;
+  border: 1px solid var(--color-border);
+  border-radius: $r-md;
+  font-size: $size-sm;
+  color: var(--color-text);
+  background: var(--color-bg);
+  outline: none;
+  cursor: pointer;
+
+  &:focus { border-color: var(--primary); }
+}
+
+.ib-project-assign-btn {
+  padding: 5px $sp-3;
+  background: var(--primary);
+  border: none;
+  border-radius: $r-md;
+  color: #fff;
+  font-size: $size-sm;
+  font-weight: $fw-semibold;
+  cursor: pointer;
+  transition: opacity $t-fast;
+  align-self: flex-start;
+
+  &:hover { opacity: .85; }
+}
+
+// ── Extraction (structured analysis) badges in list ───────────────────────────
+.ib-item-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.ib-intent-badge {
+  font-size: 12px;
+  line-height: 1;
+  cursor: default;
+  user-select: none;
+
+  // Intent variants — subtle tinted backgrounds
+  &.intent--request  { filter: none; }
+  &.intent--question { filter: none; }
+  &.intent--deadline { filter: none; }
+  &.intent--meeting  { filter: none; }
+  &.intent--fyi      { filter: none; }
+}
+
+.ib-reply-badge {
+  font-size: 11px;
+  line-height: 1;
+  cursor: default;
+  user-select: none;
+  opacity: .8;
+}
+
+.ib-actions-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  font-size: 10px;
+  font-weight: $fw-semibold;
+  color: var(--color-text-faint);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: $r-full;
+  padding: 0 5px;
+  line-height: 16px;
+  cursor: default;
+  user-select: none;
+}
+
+// ── Priority bar ──────────────────────────────────────────────────────────────
+// Vertical color stripe on the left edge of each inbox item.
+// Width = 3px; height fills the item. Colour varies by priority bucket.
+.ib-priority-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  flex-shrink: 0;
+  transition: background-color .15s ease;
+
+  &--none   { background: transparent; }
+  &--low    { background: var(--color-border); }
+  &--medium { background: #F59E0B; }  // amber-400
+  &--high   { background: #EF4444; }  // red-400
+
+  // Slight intensity based on exact score via CSS custom property --prio
+  &--high   { opacity: calc(0.7 + var(--prio, 70) * 0.003); }
+}
+
+// Make ib-item position:relative so the priority bar can use position:absolute
+.ib-item {
+  position: relative;
+}
+
+// ── Follow-up bell badge ──────────────────────────────────────────────────────
+.ib-followup-badge {
+  font-size: 11px;
+  line-height: 1;
+  cursor: default;
+  user-select: none;
+  // subtle animation to draw attention
+  animation: ib-ring .6s ease 1s both;
+}
+
+@keyframes ib-ring {
+  0%   { transform: rotate(0deg); }
+  20%  { transform: rotate(-15deg); }
+  40%  { transform: rotate(12deg); }
+  60%  { transform: rotate(-8deg); }
+  80%  { transform: rotate(5deg); }
+  100% { transform: rotate(0deg); }
+}
+
+// ── Sort toggle button ────────────────────────────────────────────────────────
+.ib-sort-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--color-text-faint);
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: $r-sm;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s;
+
+  &:hover {
+    color: var(--color-text);
+    border-color: var(--primary);
+  }
+
+  &--active {
+    color: var(--primary);
+    border-color: var(--primary);
+    background: color-mix(in srgb, var(--primary) 8%, transparent);
+  }
+}
+
+// ── Follow-up filter tab variant ─────────────────────────────────────────────
+.ib-filter-tab--followup {
+  &.ib-filter-tab--active {
+    background: #FFF8E7;
+    color: #D97706;
+  }
+}
+
+// ── Extraction panel section (assistant col) ──────────────────────────────────
+.ib-extraction-body {
+  display: flex;
+  flex-direction: column;
+  gap: $sp-2;
+}
+
+.ib-extr-intent {
+  display: flex;
+  align-items: center;
+  gap: $sp-2;
+  flex-wrap: wrap;
+
+  .ib-intent-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 8px;
+    border-radius: $r-full;
+    font-size: $size-xs;
+    font-weight: $fw-semibold;
+    background: var(--primary-light);
+    color: var(--primary);
+  }
+}
+
+.ib-extr-reply {
+  font-size: $size-xs;
+  font-weight: $fw-medium;
+  color: #D97706;
+  background: #FFFBEB;
+  padding: 2px 8px;
+  border-radius: $r-full;
+}
+
+.ib-extr-tone {
+  font-size: $size-xs;
+  color: var(--color-text-faint);
+  padding: 2px 6px;
+  border-radius: $r-full;
+  border: 1px solid var(--color-border);
+
+  &--urgent   { color: #DC2626; border-color: #FCA5A5; background: #FFF0F0; }
+  &--formal   { color: #2563EB; border-color: #BFDBFE; background: #EFF6FF; }
+  &--informal { color: #7C3AED; border-color: #DDD6FE; background: #F5F3FF; }
+}
+
+.ib-extr-deadline {
+  font-size: $size-xs;
+  color: var(--color-text-muted);
+  padding: $sp-1 0;
+
+  strong { color: #DC2626; }
+}
+
+// Action items list inside extraction panel
+.ib-extr-action-items {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: $sp-1;
+}
+
+.ib-action-item {
+  display: flex;
+  align-items: flex-start;
+  gap: $sp-2;
+  font-size: $size-xs;
+  line-height: $lh-relaxed;
+  color: var(--color-text);
+
+  &-check {
+    flex-shrink: 0;
+    color: var(--color-text-faint);
+    margin-top: 1px;
+    font-size: 11px;
+  }
+
+  &-text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &-dl {
+    flex-shrink: 0;
+    font-size: 10px;
+    color: #DC2626;
+    background: #FFF0F0;
+    padding: 1px 5px;
+    border-radius: $r-full;
+    white-space: nowrap;
+  }
+}
+
+// Entity chips
+.ib-extr-entities {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: $sp-1;
+  padding-top: $sp-2;
+  border-top: 1px dashed var(--color-border);
+}
+
+.ib-entity-group {
+  display: flex;
+  align-items: flex-start;
+  gap: $sp-2;
+  flex-wrap: wrap;
+}
+
+.ib-entity-label {
+  font-size: 10px;
+  font-weight: $fw-semibold;
+  color: var(--color-text-faint);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  flex-shrink: 0;
+  padding-top: 2px;
+  min-width: 36px;
+}
+
+.ib-entity-chips {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+
+.ib-entity-chip {
+  font-size: 10px;
+  font-weight: $fw-medium;
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: $r-full;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
+// ── Stage 8: AI-classified badge ──────────────────────────────────────────────
+.ib-ai-badge {
+  font-size: 11px;
+  line-height: 1;
+  cursor: default;
+  user-select: none;
+  opacity: .85;
+  filter: drop-shadow(0 0 2px rgba(0, 102, 255, .3));
+}
+
+// =============================================================================
+// Thread Participant Graph — shown in detail panel for multi-message threads
+// =============================================================================
+.ib-thread-graph {
+  margin: $sp-4 0 0;
+  padding: $sp-4;
+  border-top: 1px solid var(--color-border);
+  border-radius: $r-md;
+  background: var(--color-surface-alt);
+
+  // ── Header row ─────────────────────────────────────────────────────────
+  &__header {
+    display: flex;
+    align-items: center;
+    gap: $sp-2;
+    margin-bottom: $sp-3;
+  }
+
+  &__title {
+    font-size: $size-xs;
+    font-weight: $fw-semibold;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+  }
+
+  &__count {
+    font-size: $size-xs;
+    color: var(--color-text-faint);
+    margin-left: auto;
+  }
+
+  // ── Loading skeleton ───────────────────────────────────────────────────
+  &__loading {
+    display: flex;
+    align-items: center;
+    gap: $sp-2;
+    font-size: $size-xs;
+    color: var(--color-text-faint);
+    padding: $sp-1 0;
+  }
+
+  &__spinner {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--color-border);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: ib-spin 0.7s linear infinite;
+  }
+
+  @keyframes ib-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  // ── My-turn banner ─────────────────────────────────────────────────────
+  &__my-turn {
+    display: flex;
+    align-items: center;
+    gap: $sp-2;
+    padding: 6px 10px;
+    margin-bottom: $sp-3;
+    border-radius: $r-md;
+    background: rgba(33, 160, 56, .08);    // primary-light tint
+    border: 1px solid rgba(33, 160, 56, .20);
+    color: var(--primary);
+    font-size: $size-xs;
+    font-weight: $fw-semibold;
+
+    svg { flex-shrink: 0; }
+  }
+
+  // ── Participant avatars row ────────────────────────────────────────────
+  &__avatars {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: $sp-3;
+    flex-wrap: wrap;
+  }
+
+  &__avatar {
+    position: relative;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: $size-xs;
+    font-weight: $fw-semibold;
+    color: #fff;
+    cursor: default;
+    flex-shrink: 0;
+    border: 2px solid var(--color-surface-alt);
+    transition: transform $t-fast;
+
+    &:hover { transform: scale(1.1); z-index: 1; }
+
+    // My own avatar gets a green ring
+    &--me {
+      border-color: var(--primary);
+      outline: 2px solid var(--primary-light);
+    }
+
+    // "+N more" overflow chip
+    &--extra {
+      background: var(--color-border);
+      color: var(--color-text-muted);
+      font-size: $size-xs;
+    }
+  }
+
+  // Message count badge on avatar (shown when > 0 messages sent)
+  &__avatar-count {
+    position: absolute;
+    bottom: -3px;
+    right: -3px;
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    border: 1px solid var(--color-border);
+    border-radius: $r-full;
+    font-size: 9px;
+    font-weight: $fw-bold;
+    line-height: 1;
+    padding: 1px 3px;
+    min-width: 14px;
+    text-align: center;
+  }
+
+  // ── Timeline ───────────────────────────────────────────────────────────
+  &__timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    position: relative;
+
+    // Vertical connector line
+    &::before {
+      content: '';
+      position: absolute;
+      left: 5px;
+      top: 6px;
+      bottom: 6px;
+      width: 1px;
+      background: var(--color-border);
+      z-index: 0;
+    }
+  }
+
+  &__tl-entry {
+    display: flex;
+    align-items: center;
+    gap: $sp-2;
+    padding: 4px 0;
+    border-radius: $r-sm;
+    position: relative;
+    z-index: 1;
+    transition: background $t-fast;
+
+    &:hover { background: var(--color-hover); padding-left: 4px; }
+
+    // Current user's messages — slightly tinted
+    &--me &-sender { color: var(--primary); font-weight: $fw-semibold; }
+
+    // Last message — bolder dot
+    &--last &-dot {
+      background: var(--primary);
+      box-shadow: 0 0 0 2px var(--primary-light);
+    }
+  }
+
+  &__tl-dot {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: var(--color-border);
+    border: 2px solid var(--color-surface-alt);
+    flex-shrink: 0;
+    z-index: 1;
+  }
+
+  &__tl-content {
+    display: flex;
+    align-items: baseline;
+    gap: $sp-2;
+    min-width: 0;
+    flex: 1;
+  }
+
+  &__tl-sender {
+    font-size: $size-xs;
+    font-weight: $fw-medium;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 160px;
+  }
+
+  &__tl-date {
+    font-size: 10px;
+    color: var(--color-text-faint);
+    white-space: nowrap;
+    margin-left: auto;
+  }
+
+  &__tl-more {
+    font-size: $size-xs;
+    color: var(--color-text-faint);
+    padding: 4px 0 0 $sp-5;
+    font-style: italic;
+  }
+}
+
+// ── Meeting slot picker ────────────────────────────────────────────────────────
+.ib-slot-picker {
+  background: var(--color-surface);
+  border: 1px solid var(--color-accent);
+  border-radius: 10px;
+  padding: $sp-3 $sp-3 $sp-2;
+  margin-bottom: $sp-3;
+  box-shadow: 0 2px 8px rgba(0, 102, 255, 0.08);
+}
+
+.ib-slot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: $sp-2;
+}
+
+.ib-slot-title {
+  font-size: $size-sm;
+  font-weight: $fw-semibold;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: calc(100% - 28px);
+}
+
+.ib-slot-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-faint);
+  font-size: $size-sm;
+  padding: 0 4px;
+  border-radius: 4px;
+  flex-shrink: 0;
+
+  &:hover { background: var(--color-border); color: var(--color-text); }
+}
+
+.ib-slot-participants {
+  font-size: $size-xs;
+  color: var(--color-text-muted);
+  margin-bottom: $sp-2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ib-slot-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: $sp-2;
+}
+
+.ib-slot-btn {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 7px $sp-2;
+  font-size: $size-sm;
+  color: var(--color-text);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s;
+
+  &:hover:not(:disabled) {
+    background: rgba(0, 102, 255, 0.06);
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+  }
+
+  &:disabled { opacity: 0.6; cursor: default; }
+}
+
+.ib-slot-empty {
+  font-size: $size-xs;
+  color: var(--color-text-faint);
+  font-style: italic;
+  margin: $sp-1 0 $sp-2;
+}
+
+.ib-slot-fallback {
+  border-top: 1px solid var(--color-border);
+  padding-top: $sp-2;
+}
+
+.ib-slot-chat-btn {
+  background: none;
+  border: none;
+  font-size: $size-xs;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+
+  &:hover { color: var(--color-accent); }
+}

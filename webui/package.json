@@ -1,0 +1,13 @@
+{
+  "name": "personal-assistant-webui",
+  "version": "3.0.0",
+  "private": true,
+  "scripts": {
+    "build": "sass frontend/styles/main.scss dist/css/main.css --style=compressed --no-source-map && node scripts/bundle-js.js",
+    "watch": "sass frontend/styles/main.scss dist/css/main.css --watch",
+    "dev": "npm run watch"
+  },
+  "devDependencies": {
+    "sass": "^1.77.0"
+  }
+}

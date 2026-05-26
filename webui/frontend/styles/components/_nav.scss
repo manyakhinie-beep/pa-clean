@@ -1,0 +1,224 @@
+// =============================================================================
+// Left navigation sidebar
+// =============================================================================
+@use '../variables' as *;
+
+.nav {
+  width: $nav-width;
+  min-width: $nav-width;
+  background: var(--color-nav-bg);
+  border-right: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  overflow-y: auto;
+  flex-shrink: 0;
+  z-index: 10;
+
+  // ── User profile block (top of nav) ────────────────────────────────────
+  &__user-block {
+    padding: 14px $sp-4 10px;
+    border-bottom: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  &__user-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    background: var(--primary);
+    color: #fff;
+    font-size: $size-sm;
+    font-weight: $fw-bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  &__user-name {
+    font-size: $size-base;
+    font-weight: $fw-semibold;
+    color: var(--color-text);
+    line-height: 1.2;
+  }
+
+  &__user-sub {
+    font-size: $size-xs;
+    color: var(--color-text-muted);
+    margin-top: 1px;
+  }
+
+  // ── Legacy logo (kept for backwards compat) ─────────────────────────────
+  &__logo {
+    display: flex;
+    align-items: center;
+    gap: $sp-3;
+    padding: $sp-5 $sp-5 $sp-4;
+    border-bottom: 1px solid var(--color-border);
+
+    svg { width: 28px; height: 28px; flex-shrink: 0; }
+
+    &-text {
+      font-size: $size-sm;
+      font-weight: $fw-semibold;
+      color: var(--color-text);
+      line-height: 1.25;
+
+      span {
+        display: block;
+        font-size: $size-xs;
+        font-weight: $fw-normal;
+        color: var(--color-text-muted);
+        margin-top: 1px;
+      }
+    }
+  }
+
+  // ── Section groups (Главное / Инструменты) ──────────────────────────────
+  &__section {
+    padding: $sp-4 $sp-3 $sp-2;
+
+    &-label {
+      font-size: $size-xs;
+      font-weight: $fw-semibold;
+      color: var(--color-text-faint);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      padding: 0 $sp-2 $sp-2;
+    }
+  }
+
+  // ── System status (MLX + sync times) ───────────────────────────────────
+  &__sys-status {
+    padding: $sp-2 $sp-3 $sp-1;
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  &__sys-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: $size-xs;
+    color: var(--color-text-muted);
+    line-height: 1.4;
+  }
+
+  &__sys-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: $r-full;
+    flex-shrink: 0;
+    background: var(--color-text-muted);
+    transition: background .4s;
+
+    &--ok   { background: #22c55e; }
+    &--warn { background: #f59e0b; }
+    &--err  { background: #ef4444; }
+  }
+
+  &__sys-icon  { font-size: $size-xs; width: 10px; flex-shrink: 0; }
+  &__sys-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+
+  &__item {
+    display: flex;
+    align-items: center;
+    gap: $sp-3;
+    padding: $sp-2 $sp-3;
+    border-radius: $r-md;
+    cursor: pointer;
+    color: var(--color-text-muted);
+    font-size: $size-base;
+    font-weight: $fw-medium;
+    transition: background $t, color $t;
+    margin: 1px 0;
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
+
+    svg, .nav__icon {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+      opacity: .7;
+      transition: opacity $t;
+    }
+
+    .nav__badge {
+      margin-left: auto;
+      background: var(--primary);
+      color: #fff;
+      font-size: $size-xs;
+      font-weight: $fw-semibold;
+      border-radius: $r-full;
+      padding: 1px 6px;
+      min-width: 18px;
+      text-align: center;
+    }
+
+    &:hover {
+      background: $gray-100;
+      color: var(--color-text);
+      svg, .nav__icon { opacity: 1; }
+    }
+
+    // UX-FIX CSS-3: keyboard-navigation focus ring for nav items
+    &:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: -2px;
+    }
+
+    &--active {
+      background: var(--color-nav-active);
+      color: var(--primary);
+      font-weight: $fw-semibold;
+      svg, .nav__icon { opacity: 1; color: var(--primary); }
+
+      &:hover { background: var(--color-nav-active); }
+    }
+  }
+
+  &__divider {
+    height: 1px;
+    background: var(--color-border);
+    margin: $sp-2 $sp-3;
+  }
+
+  &__footer {
+    margin-top: auto;
+    padding: $sp-3;
+    border-top: 1px solid var(--color-border);
+
+    &-btn {
+      display: flex;
+      align-items: center;
+      gap: $sp-2;
+      width: 100%;
+      padding: $sp-2 $sp-3;
+      border-radius: $r-md;
+      font-size: $size-sm;
+      color: var(--color-text-muted);
+      cursor: pointer;
+      transition: background $t;
+      border: none;
+      background: none;
+
+      &:hover { background: $gray-100; color: var(--color-text); }
+
+      // UX-FIX CSS-3: keyboard focus for footer buttons
+      &:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: -2px;
+      }
+    }
+  }
+}

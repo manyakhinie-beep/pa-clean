@@ -20,6 +20,25 @@ import pytest
 
 from personal_assistant.models import CalendarEvent, Contact, MailMessage
 
+# ---------------------------------------------------------------------------
+# Env-var snapshot + clear (runs at conftest IMPORT time, before any test
+# module imports ``personal_assistant.config``). This is the only reliable
+# way to keep hermetic unit/e2e tests from loading multi-GB MLX/embedding
+# models when the developer's shell has ``PA_MLX_MODEL_PATH`` exported (e.g.
+# from a prior live-MLX scenario run). Without this, ``Settings.__init__``
+# re-populates ``settings.mlx_model_path`` from the env var, and code paths
+# that read the env directly bypass the runtime fixture blanking entirely.
+#
+# Scenario fixtures that need the original value read these snapshots
+# (NOT os.environ) — so live tests still work when invoked inline:
+#     PA_MLX_MODEL_PATH=/path/ uv run pytest -m "scenario and live and mlx"
+# ---------------------------------------------------------------------------
+ORIG_PA_MLX_MODEL_PATH = os.environ.pop("PA_MLX_MODEL_PATH", "")
+ORIG_PA_EMBEDDING_MODEL = os.environ.pop("PA_EMBEDDING_MODEL", "")
+ORIG_PA_EMBEDDING_MODEL_PATH = os.environ.pop("PA_EMBEDDING_MODEL_PATH", "")
+ORIG_PA_VAULT_PATH = os.environ.pop("PA_VAULT_PATH", "")
+os.environ["PA_PRELOAD_MODEL"] = "0"
+
 
 # ---------------------------------------------------------------------------
 # Test isolation: ignore any developer's local data/config.json overlay

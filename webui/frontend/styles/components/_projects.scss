@@ -1,0 +1,733 @@
+// =============================================================================
+// Projects tab — 3-column layout: list | detail | related
+// =============================================================================
+@use '../variables' as *;
+
+// ── Container ──────────────────────────────────────────────────────────────
+.projects {
+  display: flex;
+  flex-direction: row;
+  height: 100%;
+  overflow: hidden;
+  background: var(--color-bg);
+
+  // ────────────────────────────────────────────────────────────────────────
+  // LEFT COLUMN: project list
+  // ────────────────────────────────────────────────────────────────────────
+  &__list-col {
+    width: 260px;
+    min-width: 260px;
+    border-right: 1px solid var(--color-border);
+    background: var(--color-surface);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  &__list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px 10px;
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  &__list-title {
+    font-size: $size-base;
+    font-weight: $fw-semibold;
+    color: var(--color-text);
+  }
+
+  &__new-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: $r-md;
+    font-size: $size-xs;
+    font-weight: $fw-medium;
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    transition: background $t, transform $t-fast;
+
+    &:hover { background: var(--primary-dark, #004ecc); transform: translateY(-1px); }
+    &:active { transform: none; }
+  }
+
+  // Filter tabs
+  &__filter-tabs {
+    display: flex;
+    gap: 0;
+    padding: 8px 12px 6px;
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+  }
+
+  &__filter-tab {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 5px 4px;
+    font-size: 11px;
+    font-weight: $fw-medium;
+    color: var(--color-text-muted);
+    background: none;
+    border: none;
+    border-radius: $r-md;
+    cursor: pointer;
+    transition: background $t, color $t;
+    white-space: nowrap;
+
+    &:hover { background: var(--color-bg); color: var(--color-text); }
+
+    // UX-FIX CSS-3: keyboard focus for filter tabs
+    &:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: -2px;
+    }
+
+    &--active {
+      background: var(--color-bg);
+      color: var(--primary);
+    }
+  }
+
+  &__filter-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: $r-full;
+    font-size: 10px;
+    font-weight: $fw-semibold;
+    background: var(--color-border);
+    color: var(--color-text-muted);
+    line-height: 1;
+
+    .projects__filter-tab--active & {
+      background: var(--primary);
+      color: #fff;
+    }
+  }
+
+  // Project list items
+  &__list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 0;
+  }
+
+  &__list-item {
+    padding: 10px 16px;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+    transition: background $t, border-color $t;
+
+    &:hover { background: var(--color-bg); }
+
+    // UX-FIX CSS-3: keyboard focus for project list items
+    &:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: -2px;
+    }
+
+    &--selected {
+      background: var(--color-bg);
+      border-left-color: var(--primary);
+    }
+
+    &--active    { border-left-color: transparent; }
+    &--paused    { border-left-color: transparent; }
+    &--done      { border-left-color: transparent; opacity: .75; }
+
+    &--selected &-name { color: var(--primary); }
+  }
+
+  &__list-item-name {
+    font-size: $size-sm;
+    font-weight: $fw-medium;
+    color: var(--color-text);
+    line-height: 1.4;
+    margin-bottom: 5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__list-item-bar-wrap {
+    height: 4px;
+    background: var(--color-border);
+    border-radius: $r-full;
+    overflow: hidden;
+    margin-bottom: 5px;
+  }
+
+  &__list-item-bar {
+    height: 100%;
+    background: var(--primary);
+    border-radius: $r-full;
+    width: calc(var(--pct, 0) * 1%);
+    transition: width .4s ease;
+  }
+
+  &__list-item-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: $size-xs;
+    color: var(--color-text-muted);
+  }
+
+  &__list-item-deadline {
+    font-size: 10px;
+    color: var(--color-text-faint);
+  }
+
+  &__list-empty {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: $sp-2;
+    color: var(--color-text-muted);
+    font-size: $size-sm;
+    padding: $sp-6;
+    text-align: center;
+  }
+
+  // ────────────────────────────────────────────────────────────────────────
+  // CENTER COLUMN: project detail
+  // ────────────────────────────────────────────────────────────────────────
+  &__detail-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+  }
+
+  &__detail-empty {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: $sp-3;
+    color: var(--color-text-muted);
+    font-size: $size-base;
+
+    p { font-size: $size-sm; }
+  }
+
+  &__detail {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow-y: auto;
+    padding: 20px 24px 24px;
+
+    &-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: $sp-3;
+      margin-bottom: 8px;
+      flex-shrink: 0;
+    }
+
+    &-header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      flex: 1;
+      min-width: 0;
+    }
+
+    &-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    &-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: $r-md;
+      background: var(--primary);
+      color: #fff;
+      font-size: 11px;
+      font-weight: $fw-bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    &-title {
+      font-size: 20px;
+      font-weight: $fw-semibold;
+      color: var(--color-text);
+      line-height: 1.3;
+    }
+
+    &-desc {
+      font-size: $size-sm;
+      color: var(--color-text-muted);
+      line-height: 1.55;
+      margin-bottom: 16px;
+      flex-shrink: 0;
+    }
+  }
+
+  // ── Status badge ──────────────────────────────────────────────────────
+  &__status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 10px;
+    border-radius: $r-full;
+    font-size: 11px;
+    font-weight: $fw-semibold;
+    letter-spacing: .03em;
+
+    &[data-status="active"] { background: #e6f4e8; color: #1a7f37; }
+    &[data-status="paused"] { background: #fff3e0; color: #e07b00; }
+    &[data-status="done"]   { background: var(--color-border); color: var(--color-text-muted); }
+  }
+
+  // ── Deadline badge ────────────────────────────────────────────────────
+  &__deadline-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 10px;
+    border-radius: $r-full;
+    font-size: 11px;
+    font-weight: $fw-medium;
+    background: #fff3e0;
+    color: #e07b00;
+    gap: 4px;
+  }
+
+  // ── Icon buttons ──────────────────────────────────────────────────────
+  &__icon-btn {
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: $r-md;
+    background: none;
+    border: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+    cursor: pointer;
+    transition: background $t, color $t, border-color $t;
+
+    &:hover { background: var(--color-bg); color: var(--color-text); border-color: var(--color-text-muted); }
+
+    &--danger:hover { background: $sber-danger-light; color: var(--danger); border-color: var(--danger); }
+  }
+
+  // ── Progress ──────────────────────────────────────────────────────────
+  &__progress-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+    flex-shrink: 0;
+  }
+
+  &__progress-bar-wrap {
+    flex: 1;
+    height: 6px;
+    background: var(--color-border);
+    border-radius: $r-full;
+    overflow: hidden;
+  }
+
+  &__progress-bar {
+    height: 100%;
+    background: var(--primary);
+    border-radius: $r-full;
+    width: calc(var(--pct, 0) * 1%);
+    transition: width .5s ease;
+  }
+
+  &__progress-pct {
+    font-size: $size-sm;
+    font-weight: $fw-semibold;
+    color: var(--primary);
+    min-width: 36px;
+    text-align: right;
+  }
+
+  &__goals-meta {
+    font-size: $size-xs;
+    color: var(--color-text-muted);
+    margin-bottom: 16px;
+    flex-shrink: 0;
+  }
+
+  // ── Goals section ─────────────────────────────────────────────────────
+  &__goals-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  &__goals-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    flex-shrink: 0;
+  }
+
+  &__section-label {
+    font-size: $size-sm;
+    font-weight: $fw-semibold;
+    color: var(--color-text);
+  }
+
+  &__add-goal-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: $r-md;
+    font-size: $size-xs;
+    font-weight: $fw-medium;
+    color: var(--primary);
+    background: none;
+    border: 1px solid var(--primary);
+    cursor: pointer;
+    transition: background $t, color $t;
+
+    &:hover { background: var(--primary); color: #fff; }
+  }
+
+  // Goal items
+  &__goal-item {
+    display: flex;
+    align-items: center;
+    gap: $sp-3;
+    padding: 8px 10px;
+    border-radius: $r-md;
+    transition: background $t;
+
+    &:hover {
+      background: var(--color-bg);
+
+      .projects__goal-item-delete { opacity: 1; }
+    }
+
+    input[type="checkbox"] {
+      width: 17px;
+      height: 17px;
+      border-radius: $r-sm;
+      accent-color: var(--primary);
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+
+    &-body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    &-title {
+      font-size: $size-sm;
+      color: var(--color-text);
+      line-height: 1.4;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+
+      &--done {
+        text-decoration: line-through;
+        color: var(--color-text-muted);
+      }
+    }
+
+    &-deadline {
+      font-size: 11px;
+      color: var(--color-text-faint);
+      margin-top: 1px;
+    }
+
+    &-delete {
+      opacity: 0;
+      transition: opacity $t;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--danger);
+      font-size: $size-xs;
+      padding: 2px 5px;
+      border-radius: $r-sm;
+      flex-shrink: 0;
+
+      &:hover { background: $sber-danger-light; }
+    }
+  }
+
+  // Inline add form
+  &__goal-add-form {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+    border-radius: $r-md;
+    background: var(--color-bg);
+    border: 1px dashed var(--color-border);
+    margin-top: 4px;
+    flex-shrink: 0;
+  }
+
+  &__goal-add-input {
+    flex: 1;
+    background: none;
+    border: none;
+    outline: none;
+    font-size: $size-sm;
+    color: var(--color-text);
+
+    &::placeholder { color: var(--color-text-faint); }
+  }
+
+  &__goal-add-deadline {
+    background: none;
+    border: 1px solid var(--color-border);
+    border-radius: $r-sm;
+    font-size: 11px;
+    color: var(--color-text-muted);
+    padding: 2px 6px;
+    cursor: pointer;
+  }
+
+  // AI suggest goal button
+  &__suggest-goal-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 8px 10px;
+    font-size: $size-xs;
+    color: var(--color-text-muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+    border-radius: $r-md;
+    margin-top: 4px;
+    transition: background $t, color $t;
+
+    &:hover { background: var(--color-bg); color: var(--primary); }
+
+    svg { color: var(--primary); opacity: .8; }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────
+  // RIGHT COLUMN: related data + AI suggestion
+  // ────────────────────────────────────────────────────────────────────────
+  &__related-col {
+    width: 280px;
+    min-width: 280px;
+    border-left: 1px solid var(--color-border);
+    background: var(--color-surface);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    padding: 16px 0;
+  }
+
+  &__related-empty {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: $sp-2;
+    color: var(--color-text-muted);
+    padding: $sp-6;
+
+    p { font-size: $size-sm; }
+  }
+
+  &__related-title {
+    font-size: 10px;
+    font-weight: $fw-semibold;
+    letter-spacing: .08em;
+    color: var(--color-text-faint);
+    text-transform: uppercase;
+    padding: 0 16px 10px;
+  }
+
+  &__related-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    cursor: pointer;
+    transition: background $t;
+    border-radius: 0;
+
+    &:hover { background: var(--color-bg); }
+  }
+
+  &__related-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: $r-md;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+
+    &--mail    { background: #e8f4ff; color: #0066ff; }
+    &--calendar{ background: #e8f9f0; color: #1a7f37; }
+    &--contact { background: #f3eeff; color: #7c3aed; }
+    &--thread  { background: #fff4e0; color: #e07b00; }
+  }
+
+  &__related-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  &__related-count {
+    font-size: $size-sm;
+    font-weight: $fw-medium;
+    color: var(--color-text);
+  }
+
+  &__related-sub {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__related-chevron {
+    color: var(--color-text-faint);
+    flex-shrink: 0;
+  }
+
+  // ── AI suggestion card ────────────────────────────────────────────────
+  &__ai-card {
+    margin: 12px 12px 0;
+    border-radius: $r-lg;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    padding: 12px 14px;
+
+    &-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: $fw-semibold;
+      color: var(--primary);
+      margin-bottom: 8px;
+
+      svg { flex-shrink: 0; }
+    }
+
+    &-text {
+      font-size: $size-sm;
+      color: var(--color-text);
+      line-height: 1.5;
+      margin-bottom: 10px;
+    }
+
+    &-actions {
+      display: flex;
+      gap: 6px;
+    }
+  }
+
+  // ── Manage links accordion ────────────────────────────────────────────
+  &__manage-links {
+    margin: 12px 12px 0;
+
+    &-summary {
+      font-size: $size-xs;
+      color: var(--color-text-muted);
+      cursor: pointer;
+      padding: 6px 0;
+      user-select: none;
+      list-style: none;
+
+      &::-webkit-details-marker { display: none; }
+      &::before { content: '▸ '; font-size: 9px; }
+    }
+
+    &[open] &-summary::before { content: '▾ '; }
+
+    &-body {
+      padding: 8px 0 4px;
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────
+  // MODAL: create / edit project
+  // ────────────────────────────────────────────────────────────────────────
+  &__modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: $z-modal;
+    backdrop-filter: blur(2px);
+  }
+
+  &__modal-inner {
+    background: var(--color-surface);
+    border-radius: $r-xl;
+    padding: $sp-6;
+    width: 100%;
+    max-width: 520px;
+    box-shadow: $shadow-pop;
+    display: flex;
+    flex-direction: column;
+    gap: $sp-3;
+  }
+
+  &__modal-title {
+    font-size: 16px;
+    font-weight: $fw-semibold;
+    color: var(--color-text);
+    margin-bottom: 4px;
+  }
+
+  &__form-row {
+    display: flex;
+    flex-direction: column;
+    gap: $sp-1;
+
+    label {
+      font-size: $size-sm;
+      font-weight: $fw-medium;
+      color: var(--color-text-muted);
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Legacy aliases (backward compat with old JS)
+  // ────────────────────────────────────────────────────────────────────────
+  &__card        { @extend .projects__list-item; }
+  &__card-title  { @extend .projects__list-item-name; }
+}

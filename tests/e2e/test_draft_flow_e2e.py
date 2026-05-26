@@ -25,6 +25,7 @@ Tests are grouped by layer:
 
 from __future__ import annotations
 
+import sys
 import textwrap
 from pathlib import Path
 from unittest.mock import patch
@@ -91,20 +92,22 @@ def _make_mail_vault(tmp_path: Path, messages: list[dict]) -> Path:
 
 
 def _chat_client(vault: Path | None = None):
-    """Return a TestClient for the chat router, optionally with a patched vault path."""
+    """Return a TestClient for the chat router.
+
+    The ``vault`` argument is kept for backward-compat with existing call sites
+    but is no longer used here: every caller that needs ``settings.vault_path``
+    redirected wraps its actual request in its own ``with patch(...)`` block
+    (see e.g. :class:`TestMessageMetaEndpoint`). Previously this helper called
+    ``patcher.start()`` without a matching ``stop()`` — that left
+    ``personal_assistant.config.settings`` replaced by a ``MagicMock`` for the
+    rest of the Python process, breaking every later test that read settings
+    (notably ``test_rules_settings_e2e``).
+    """
     from personal_assistant.mlx_server.chat_routes import router as chat_router
 
     app = FastAPI()
     app.include_router(chat_router)
-    client = TestClient(app)
-
-    if vault is not None:
-        # Patch config.settings inside the routes module
-        patcher = patch("personal_assistant.config.settings")
-        mock_cfg = patcher.start()
-        mock_cfg.vault_path = vault
-        client._vault_patcher = patcher   # stash so caller can stop it
-    return client
+    return TestClient(app)
 
 
 # ---------------------------------------------------------------------------
@@ -227,6 +230,11 @@ class TestSaveDraftMailEndpoint:
         })
         assert resp.status_code == 422
 
+    @pytest.mark.skipif(
+        sys.platform == "darwin",
+        reason="501 guard only triggers off-macOS; on Darwin the endpoint "
+               "calls real osascript and returns 500 from Mail.app instead.",
+    )
     def test_returns_501_on_non_macos(self):
         """Without platform patch the endpoint returns 501."""
         client = self._client()

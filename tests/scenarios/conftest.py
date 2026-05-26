@@ -29,10 +29,10 @@ def session_mlx_engine() -> Any:
     except ImportError:
         pytest.skip("mlx-lm not installed")
 
-    import os
-
     from personal_assistant.config import settings
-    model_path = os.environ.get("PA_MLX_MODEL_PATH", "").strip() or settings.mlx_model_path
+    from tests.conftest import ORIG_PA_MLX_MODEL_PATH
+
+    model_path = ORIG_PA_MLX_MODEL_PATH.strip() or settings.mlx_model_path
     if not model_path or not Path(model_path).exists():
         pytest.skip("PA_MLX_MODEL_PATH not set or invalid")
     # The root conftest blanks mlx_model_path for safety (so unit/e2e never load
@@ -60,14 +60,11 @@ def session_embedding_model() -> Any:
     except ImportError:
         pytest.skip("sentence-transformers not installed")
 
-    import os
-
     from personal_assistant.config import settings
+    from tests.conftest import ORIG_PA_EMBEDDING_MODEL, ORIG_PA_EMBEDDING_MODEL_PATH
 
-    model_name = (os.environ.get("PA_EMBEDDING_MODEL", "") or settings.embedding_model or "").strip()
-    model_path = (
-        os.environ.get("PA_EMBEDDING_MODEL_PATH", "") or settings.embedding_model_path or ""
-    ).strip()
+    model_name = (ORIG_PA_EMBEDDING_MODEL or settings.embedding_model or "").strip()
+    model_path = (ORIG_PA_EMBEDDING_MODEL_PATH or settings.embedding_model_path or "").strip()
 
     if not model_name and not model_path:
         pytest.skip("No embedding model configured (PA_EMBEDDING_MODEL / PA_EMBEDDING_MODEL_PATH)")

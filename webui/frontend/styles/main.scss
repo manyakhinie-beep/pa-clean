@@ -1,0 +1,406 @@
+// =============================================================================
+// main.scss — root stylesheet that imports everything
+// All @use rules must appear before any CSS output
+// =============================================================================
+@use 'variables' as *;
+@use 'components/nav';
+@use 'components/inbox';
+@use 'components/chat';
+@use 'components/vault';
+@use 'components/projects';
+@use 'components/settings';
+@use 'components/search';
+@use 'components/rules';
+@use 'components/today';
+
+// ── Reset & base ──────────────────────────────────────────────────────────────
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: $font-base;
+  font-size: $size-base;
+  line-height: $lh-base;
+  background: var(--color-bg);
+  color: var(--color-text);
+  overflow: hidden;
+}
+
+a {
+  color: var(--primary);
+  text-decoration: none;
+  &:hover { text-decoration: underline; }
+}
+
+button, input, select, textarea {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+// ── Layout ────────────────────────────────────────────────────────────────────
+.app {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.tab-panel {
+  display: none;
+  flex: 1;
+  overflow: hidden;
+
+  &--active {
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+// ── Base button ───────────────────────────────────────────────────────────────
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: $sp-2;
+  padding: 7px $sp-4;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: $r-md;
+  font-size: $size-sm;
+  font-weight: $fw-medium;
+  cursor: pointer;
+  transition: background $t, transform $t-fast, box-shadow $t;
+  white-space: nowrap;
+
+  &:hover   { background: var(--primary-hover); }
+  &:active  { transform: scale(.97); }
+
+  &--sm     { padding: 4px $sp-3; font-size: $size-xs; }
+  &--full   { width: 100%; justify-content: center; }
+
+  &--secondary {
+    background: var(--color-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+
+    &:hover { background: var(--color-border); }
+  }
+
+  &--danger {
+    background: var(--danger);
+
+    &:hover { background: #c62828; }
+  }
+
+  // UX-FIX CSS-2: replaces hardcoded inline style="border-color:#ef4444;color:#ef4444"
+  // Used on #classify-reset-btn in Settings → Classify tab
+  &--danger-outline {
+    background: transparent;
+    color: var(--danger);
+    border-color: var(--danger);
+
+    &:hover {
+      background: rgba(229, 57, 53, .06);
+      border-color: var(--danger);
+    }
+  }
+
+  // UX-FIX CSS-3: keyboard focus ring for all .btn elements
+  &:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+
+  &--ghost {
+    background: none;
+    color: var(--color-text-muted);
+    border: none;
+
+    &:hover { background: var(--color-bg); color: var(--color-text); }
+  }
+}
+
+// ── Tags / badges (shared) ────────────────────────────────────────────────────
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px $sp-2;
+  border-radius: $r-full;
+  font-size: $size-xs;
+  font-weight: $fw-medium;
+  background: var(--primary-light);
+  color: var(--primary);
+  white-space: nowrap;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px $sp-2;
+  border-radius: $r-full;
+  font-size: $size-xs;
+  font-weight: $fw-medium;
+  background: var(--color-border);
+  color: var(--color-text-muted);
+}
+
+// ── Shared search input ───────────────────────────────────────────────────────
+.search-input {
+  padding: 6px $sp-3;
+  border: 1px solid var(--color-border);
+  border-radius: $r-md;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: $size-sm;
+  outline: none;
+  transition: border-color $t, box-shadow $t;
+
+  &:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(33,160,56,.1);
+  }
+
+  &::placeholder { color: var(--color-text-faint); }
+}
+
+// ── Toast notifications ───────────────────────────────────────────────────────
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: $sp-3;
+  padding: $sp-3 $sp-4;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: $r-lg;
+  box-shadow: $shadow-lg;
+  font-size: $size-sm;
+  max-width: 340px;
+  animation: toast-in .25s ease;
+
+  &--success { border-left: 3px solid var(--primary); }
+  &--error   { border-left: 3px solid var(--danger);  }
+  &--warning { border-left: 3px solid var(--warning); }
+  &--info    { border-left: 3px solid var(--info);    }
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+// ── Modal backdrop ────────────────────────────────────────────────────────────
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: $z-modal;
+  backdrop-filter: blur(2px);
+}
+
+// ── Scrollbar styling ─────────────────────────────────────────────────────────
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: $gray-300;
+  border-radius: $r-full;
+
+  &:hover { background: var(--primary); }
+}
+
+// ── Draft edit panel (.dp) ─────────────────────────────────────────────────
+.dp {
+  margin-top: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  box-shadow: $shadow-md;
+  overflow: hidden;
+  font-size: $size-sm;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: $sp-2 $sp-3;
+    background: var(--color-surface-alt, var(--color-surface));
+    border-bottom: 1px solid var(--color-border);
+    font-weight: 600;
+    color: var(--color-text);
+  }
+
+  &__close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--color-text-muted, #888);
+    font-size: 16px;
+    line-height: 1;
+    padding: 0 $sp-1;
+    &:hover { color: var(--color-text); }
+  }
+
+  &__fields {
+    padding: $sp-2 $sp-3 $sp-1;
+    display: flex;
+    flex-direction: column;
+    gap: $sp-1;
+  }
+
+  &__row {
+    display: flex;
+    align-items: flex-start;
+    gap: $sp-2;
+  }
+
+  &__label {
+    width: 58px;
+    flex-shrink: 0;
+    padding-top: 5px;
+    font-size: $size-xs;
+    color: var(--color-text-muted, #888);
+    text-align: right;
+  }
+
+  &__input {
+    flex: 1;
+    padding: 4px 8px;
+    border: 1px solid var(--color-border);
+    border-radius: $r-md;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-size: $size-sm;
+    font-family: inherit;
+    outline: none;
+    &:focus { border-color: var(--primary); }
+  }
+
+  &__body {
+    display: block;
+    width: calc(100% - #{$sp-3 * 2});
+    margin: $sp-1 $sp-3;
+    min-height: 120px;
+    max-height: 320px;
+    padding: $sp-2;
+    border: 1px solid var(--color-border);
+    border-radius: $r-md;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-size: $size-sm;
+    font-family: inherit;
+    line-height: 1.5;
+    resize: vertical;
+    outline: none;
+    box-sizing: border-box;
+    &:focus { border-color: var(--primary); }
+  }
+
+  &__actions {
+    display: flex;
+    gap: $sp-2;
+    padding: $sp-2 $sp-3 $sp-3;
+    flex-wrap: wrap;
+  }
+
+  &__btn {
+    padding: 5px 14px;
+    border-radius: $r-lg;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-size: $size-sm;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background .15s, color .15s;
+    &:hover { background: var(--color-hover, #f0f0f0); }
+    &--primary {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+      &:hover { filter: brightness(1.1); }
+    }
+    &:disabled { opacity: .55; cursor: default; }
+  }
+
+  &__status {
+    font-size: $size-xs;
+    color: var(--color-text-muted, #888);
+    padding: 0 $sp-3 $sp-2;
+    min-height: 16px;
+  }
+}
+
+// ── Nav system-status panel (.nav__sys-status) ────────────────────────────
+.nav__sys-status {
+  padding: $sp-2 $sp-3 $sp-1;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.nav__sys-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--color-text-muted, #888);
+  line-height: 1.4;
+}
+
+.nav__sys-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: $r-full;
+  flex-shrink: 0;
+  background: var(--color-text-muted, #888);
+  // states set by JS
+  &--ok      { background: #22c55e; }
+  &--warn    { background: #f59e0b; }
+  &--err     { background: #ef4444; }
+}
+
+.nav__sys-icon {
+  font-size: 11px;
+  width: 8px;
+  flex-shrink: 0;
+}
+
+.nav__sys-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+
+// Inline mode badge in chat header
+.chat__mode-badge {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: $r-full;
+  background: var(--color-surface-alt, rgba(0,102,255,.08));
+  color: var(--primary, #0066ff);
+  border: 1px solid rgba(0,102,255,.18);
+  white-space: nowrap;
+  user-select: none;
+}

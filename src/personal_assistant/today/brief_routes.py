@@ -118,6 +118,12 @@ def trigger_brief_generation(background_tasks: BackgroundTasks):
     Runs in background, invalidates cache.
     Returns immediately with { queued: true }.
     """
+    # Test mode: build_daily_brief reads the vault and may hit MLX engine.
+    # TestClient awaits BackgroundTasks inline before returning.
+    from personal_assistant.config import settings as _cfg
+    if _cfg.e2e_test_mode:
+        return {"queued": True, "message": "e2e_test_mode: пропущено", "e2e": True}
+
     from personal_assistant.services.daily_brief_service import build_daily_brief
 
     vault_path = _get_vault_path()

@@ -1,0 +1,159 @@
+// =============================================================================
+// Sber Brandbook Design Tokens
+// =============================================================================
+
+// --- Brand colours ---
+$sber-primary:       #21A038;
+$sber-primary-hover: #1B8A30;
+$sber-primary-light: #E8F5EC;
+$sber-dark:          #1A1A1A;
+$sber-gray:          #6B7280;
+$sber-gray-light:    #9CA3AF;
+$sber-light-bg:      #F7F8FA;
+$sber-surface:       #FFFFFF;
+$sber-border:        #E5E7EB;
+$sber-border-focus:  #21A038;
+$sber-danger:        #E53935;
+$sber-danger-light:  #FFEBEE;
+$sber-warning:       #FFA000;
+$sber-warning-light: #FFF8E1;
+$sber-info:          #2196F3;
+$sber-info-light:    #E3F2FD;
+$sber-success:       #21A038;
+$sber-success-light: #E8F5EC;
+
+// --- Neutrals scale ---
+$gray-50:  #F9FAFB;
+$gray-100: #F3F4F6;
+$gray-200: #E5E7EB;
+$gray-300: #D1D5DB;
+$gray-400: #9CA3AF;
+$gray-500: #6B7280;
+$gray-600: #4B5563;
+$gray-700: #374151;
+$gray-800: #1F2937;
+$gray-900: #111827;
+
+// --- Typography ---
+$font-base:   system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+$font-mono:   "SF Mono", "Fira Code", "Cascadia Code", monospace;
+$size-xs:     11px;
+$size-sm:     12px;
+$size-base:   14px;
+$size-md:     15px;
+$size-lg:     16px;
+$size-xl:     18px;
+$size-2xl:    20px;
+$size-3xl:    24px;
+$lh-tight:    1.3;
+$lh-base:     1.5;
+$lh-relaxed:  1.6;
+$fw-normal:   400;
+$fw-medium:   500;
+$fw-semibold: 600;
+$fw-bold:     700;
+
+// --- Spacing scale (4-px grid) ---
+$sp-1: 4px;
+$sp-2: 8px;
+$sp-3: 12px;
+$sp-4: 16px;
+$sp-5: 20px;
+$sp-6: 24px;
+$sp-8: 32px;
+
+// --- Border radius ---
+$r-sm:   4px;
+$r-md:   8px;
+$r-lg:   12px;
+$r-xl:   16px;
+$r-full: 9999px;
+
+// --- Shadows ---
+$shadow-xs:  0 1px 2px rgba(0,0,0,.06);
+$shadow-sm:  0 1px 4px rgba(0,0,0,.08);
+$shadow-md:  0 4px 16px rgba(0,0,0,.10);
+$shadow-lg:  0 8px 32px rgba(0,0,0,.12);
+$shadow-pop: 0 12px 40px rgba(0,0,0,.15);
+
+// --- Transitions ---
+$t-fast:  100ms ease;
+$t:       150ms ease;
+$t-slow:  250ms ease;
+
+// --- Layout ---
+$nav-width:    220px;
+$header-h:     56px;
+$sidebar-w:    260px;
+$content-max:  900px;
+
+// --- Z-index ---
+$z-dropdown:  200;
+$z-modal:     400;
+$z-toast:     600;
+
+// =============================================================================
+// CSS custom properties (runtime-switchable for dark mode)
+// =============================================================================
+:root {
+  --primary:          #{$sber-primary};
+  --primary-hover:    #{$sber-primary-hover};
+  --primary-light:    #{$sber-primary-light};
+  // UX-FIX CSS-1: --primary-dark was used in _projects.scss but undefined
+  --primary-dark:     #{$sber-primary-hover};
+  --danger:           #{$sber-danger};
+  --warning:          #{$sber-warning};
+  --info:             #{$sber-info};
+
+  --color-bg:         #{$sber-light-bg};
+  --color-surface:    #{$sber-surface};
+  --color-border:     #{$sber-border};
+  --color-text:       #{$gray-800};
+  --color-text-muted: #{$gray-500};
+  --color-text-faint: #{$gray-400};
+  --color-nav-bg:     #{$sber-surface};
+  --color-nav-active: #{$sber-primary-light};
+
+  // UX-FIX CSS-1: aliases used in component SCSS but missing from :root
+  // These were defined in the old webui/scss/_variables.scss and were not ported
+  --color-primary:         #{$sber-primary};
+  --color-primary-rgb:     33, 160, 56;      // RGB of #21A038 — used in rgba()
+  --color-accent:          #{$sber-primary};
+  --color-accent-subtle:   #{$sber-primary-light};
+  --color-hover:           #{$gray-100};     // subtle hover background
+  --color-bg-hover:        #{$gray-100};
+  --color-bg-subtle:       #{$gray-50};
+  --color-bg-sidebar:      #{$sber-surface};
+  --color-text-secondary:  #{$gray-600};     // slightly darker than muted
+  --color-warn:            #{$sber-warning};
+  --color-surface-alt:     #{$gray-50};      // cards, alternate row
+  --color-surface-raised:  #{$sber-surface}; // elevated surfaces (dropdowns)
+
+  --shadow-sm: #{$shadow-sm};
+  --shadow-md: #{$shadow-md};
+
+  --r-sm:  #{$r-sm};
+  --r-md:  #{$r-md};
+  --r-lg:  #{$r-lg};
+  --r-xl:  #{$r-xl};
+}
+
+[data-theme="dark"] {
+  --color-bg:         #111827;
+  --color-surface:    #1F2937;
+  --color-border:     #374151;
+  --color-text:       #F9FAFB;
+  --color-text-muted: #9CA3AF;
+  --color-text-faint: #6B7280;
+  --color-nav-bg:     #1A2233;
+  --color-nav-active: rgba(33,160,56,.15);
+
+  // UX-FIX CSS-1: dark-mode overrides for new aliases
+  --color-hover:           #374151;
+  --color-bg-hover:        #374151;
+  --color-bg-subtle:       #1A2233;
+  --color-bg-sidebar:      #1A2233;
+  --color-text-secondary:  #D1D5DB;
+  --color-surface-alt:     #1A2233;
+  --color-surface-raised:  #2D3748;
+}

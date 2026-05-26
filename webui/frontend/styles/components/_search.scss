@@ -1,0 +1,197 @@
+// =============================================================================
+// Search tab
+// =============================================================================
+@use '../variables' as *;
+
+.search {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+
+  // ── Hero input area ────────────────────────────────────────────────────
+  &__hero {
+    padding: $sp-6 $sp-6 $sp-4;
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: $sp-4;
+    flex-shrink: 0;
+  }
+
+  &__input-wrap {
+    position: relative;
+    width: 100%;
+    max-width: 680px;
+
+    svg {
+      position: absolute;
+      left: $sp-3;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--color-text-muted);
+      pointer-events: none;
+    }
+  }
+
+  &__input {
+    width: 100%;
+    padding: $sp-3 $sp-4 $sp-3 40px;
+    border: 2px solid var(--color-border);
+    border-radius: $r-xl;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-size: $size-lg;
+    font-family: $font-base;
+    outline: none;
+    transition: border-color $t, box-shadow $t;
+    box-shadow: $shadow-sm;
+
+    &:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 4px rgba(33,160,56,.12);
+    }
+
+    &::placeholder { color: var(--color-text-faint); }
+  }
+
+  // ── Filters row ────────────────────────────────────────────────────────
+  &__filters {
+    display: flex;
+    align-items: center;
+    gap: $sp-2;
+    width: 100%;
+    max-width: 680px;
+    flex-wrap: wrap;
+  }
+
+  &__filter-chip {
+    padding: 4px $sp-3;
+    border: 1px solid var(--color-border);
+    border-radius: $r-full;
+    background: var(--color-bg);
+    color: var(--color-text-muted);
+    font-size: $size-sm;
+    font-family: $font-base;
+    cursor: pointer;
+    transition: background $t, border-color $t, color $t;
+
+    &:hover {
+      background: var(--primary-light);
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    &--active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+
+      &:hover {
+        background: var(--primary-hover);
+        color: #fff;
+      }
+    }
+  }
+
+  // ── Results area ───────────────────────────────────────────────────────
+  &__results {
+    flex: 1;
+    overflow-y: auto;
+    padding: $sp-4 $sp-6;
+    display: flex;
+    flex-direction: column;
+    gap: $sp-3;
+  }
+
+  // ── Single result card ─────────────────────────────────────────────────
+  &__result {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: $r-lg;
+    padding: $sp-4;
+    cursor: pointer;
+    transition: box-shadow $t, border-color $t;
+    box-shadow: $shadow-xs;
+
+    &:hover {
+      box-shadow: $shadow-md;
+      border-color: var(--primary);
+    }
+  }
+
+  &__result-header {
+    display: flex;
+    align-items: center;
+    gap: $sp-2;
+    margin-bottom: $sp-2;
+    flex-wrap: wrap;
+  }
+
+  &__result-snippet {
+    font-size: $size-sm;
+    color: var(--color-text-muted);
+    line-height: $lh-relaxed;
+    margin-bottom: $sp-2;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  &__result-tags {
+    display: flex;
+    gap: $sp-1;
+    flex-wrap: wrap;
+  }
+
+  // ── Highlighted text ──────────────────────────────────────────────────
+  &__highlight {
+    background: rgba(255, 214, 0, .35);
+    border-radius: 2px;
+    padding: 0 2px;
+    color: inherit;
+    font-weight: $fw-medium;
+  }
+
+  // ── Empty state ────────────────────────────────────────────────────────
+  &__empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: $sp-3;
+    padding: $sp-8;
+    color: var(--color-text-muted);
+    font-size: $size-base;
+    text-align: center;
+    flex: 1;
+  }
+
+  // ── Loading spinner ────────────────────────────────────────────────────
+  &__loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: $sp-3;
+    padding: $sp-6;
+    color: var(--color-text-muted);
+    font-size: $size-sm;
+
+    &::before {
+      content: '';
+      width: 20px;
+      height: 20px;
+      border: 2px solid var(--color-border);
+      border-top-color: var(--primary);
+      border-radius: $r-full;
+      animation: spin .7s linear infinite;
+    }
+  }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

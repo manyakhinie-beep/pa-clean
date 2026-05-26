@@ -473,6 +473,11 @@ def classify(req: ClassifyRequest, background_tasks: BackgroundTasks):
 @app.post("/run-pipeline")
 def run_pipeline(background_tasks: BackgroundTasks):
     """Trigger the scheduled pipeline manually (runs in background)."""
+    # Test mode: scheduler.run_pipeline does the full mail/calendar/classify/
+    # summarize cycle via osascript + MLX — TestClient would await it inline.
+    if settings.e2e_test_mode:
+        return {"status": "pipeline started in background", "e2e": True}
+
     from personal_assistant.mlx_server.scheduler import run_pipeline as do_run
 
     background_tasks.add_task(do_run)
@@ -504,6 +509,15 @@ def build_vector_index(background_tasks: BackgroundTasks):
 
     После завершения /search/hybrid начнёт использовать векторный поиск.
     """
+    # Test mode: bge-m3 (~570 MB) would download to HF cache on first call,
+    # blowing up disk/RAM. TestClient awaits the background task inline.
+    if settings.e2e_test_mode:
+        return {
+            "status": "index build started",
+            "docs_to_index": 0,
+            "note": "e2e_test_mode: пропущено (тестовый режим)",
+            "e2e": True,
+        }
 
     def _build():
         from personal_assistant.mlx_server.vector_index import (
@@ -725,6 +739,13 @@ def sync_data(req: _SyncRequest = None, background_tasks: BackgroundTasks = None
     Pass ``sources`` list to control which sub-commands run.
     Contacts are always written as a by-product of calendar/mail/outlook sync.
     """
+    # Test mode: never trigger a real Apple Mail / Calendar sync. Starlette's
+    # TestClient awaits ``BackgroundTasks`` inline before returning, so without
+    # this guard a ``client.post("/sync")`` call would block reading the entire
+    # mailbox via osascript and blow up memory.
+    if settings.e2e_test_mode:
+        return {"status": "sync started", "sources": [], "e2e": True}
+
     import time as _time
 
     req = req or _SyncRequest()

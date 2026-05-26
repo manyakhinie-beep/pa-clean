@@ -1,0 +1,324 @@
+{
+  "ghost_item_00": {
+    "read": true
+  },
+  "roundtrip_test_42": {
+    "read": false
+  },
+  "tag_test_item_01": {
+    "extra_tags": [
+      "category:finance",
+      "urgency:urgent"
+    ]
+  },
+  "tag_test_item_02": {
+    "extra_tags": [
+      "category:finance",
+      "urgency:high"
+    ]
+  },
+  "tag_test_item_03": {
+    "extra_tags": [
+      "new:tag"
+    ]
+  },
+  "tag_test_item_04": {
+    "extra_tags": []
+  },
+  "proj_test_item_01": {
+    "project_id": "proj_abc",
+    "project_name": "Project Alpha",
+    "extra_tags": [
+      "category:projects"
+    ]
+  },
+  "proj_test_item_02": {
+    "project_id": "proj_xyz",
+    "extra_tags": [
+      "category:projects"
+    ]
+  },
+  "proj_test_item_03": {
+    "project_id": "proj_tag_check",
+    "project_name": "Tag Check",
+    "extra_tags": [
+      "category:projects"
+    ]
+  },
+  "state_persist_99": {
+    "read": true,
+    "extra_tags": [
+      "custom:verify",
+      "category:projects"
+    ],
+    "project_id": "proj_persist"
+  },
+  "extract_test_01": {
+    "extraction": {
+      "action_items": [
+        {
+          "text": "срочно подготовить финансовый отчёт до 30 мая",
+          "deadline": null,
+          "assignee": "me"
+        }
+      ],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "amounts": [],
+        "dates": [
+          "30 мая"
+        ]
+      },
+      "intent": "deadline",
+      "tone": "urgent",
+      "reply_required": true,
+      "deadline": "2026-05-30",
+      "summary_one_line": "Прошу срочно подготовить финансовый отчёт до 30 мая"
+    }
+  },
+  "extract_test_02": {
+    "extraction": {
+      "action_items": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "amounts": [
+          "500 000 руб"
+        ],
+        "dates": []
+      },
+      "intent": "meeting",
+      "tone": "formal",
+      "reply_required": false,
+      "deadline": null,
+      "summary_one_line": "Встреча с Иваном Петровым из ООО Альфа"
+    }
+  },
+  "extract_deadline_01": {
+    "extraction": {
+      "action_items": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "amounts": [],
+        "dates": [
+          "2026-06-15"
+        ]
+      },
+      "intent": "deadline",
+      "tone": "formal",
+      "reply_required": false,
+      "deadline": "2026-06-15",
+      "summary_one_line": "Отчёт нужен до 2026-06-15"
+    }
+  },
+  "extract_empty_01": {
+    "extraction": {
+      "action_items": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "amounts": [],
+        "dates": []
+      },
+      "intent": "unknown",
+      "tone": "neutral",
+      "reply_required": false,
+      "deadline": null,
+      "summary_one_line": "Пустое тело письма"
+    }
+  },
+  "extract_no_body_01": {
+    "extraction": {
+      "action_items": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "amounts": [],
+        "dates": []
+      },
+      "intent": "unknown",
+      "tone": "neutral",
+      "reply_required": false,
+      "deadline": null,
+      "summary_one_line": "Пустое тело письма"
+    }
+  },
+  "extract_long_01": {
+    "extraction": {
+      "action_items": [
+        {
+          "text": "подготовить документы",
+          "deadline": null,
+          "assignee": "me"
+        },
+        {
+          "text": "подготовить документы",
+          "deadline": null,
+          "assignee": "me"
+        },
+        {
+          "text": "подготовить документы",
+          "deadline": null,
+          "assignee": "me"
+        },
+        {
+          "text": "подготовить документы",
+          "deadline": null,
+          "assignee": "me"
+        },
+        {
+          "text": "подготовить документы",
+          "deadline": null,
+          "assignee": "me"
+        }
+      ],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "amounts": [],
+        "dates": []
+      },
+      "intent": "request",
+      "tone": "formal",
+      "reply_required": true,
+      "deadline": null,
+      "summary_one_line": "Прошу подготовить документы"
+    }
+  },
+  "extract_cap_01": {
+    "extraction": {
+      "action_items": [
+        {
+          "text": "сделать задачу 0",
+          "deadline": null,
+          "assignee": "me"
+        },
+        {
+          "text": "сделать задачу 1",
+          "deadline": null,
+          "assignee": "me"
+        },
+        {
+          "text": "сделать задачу 2",
+          "deadline": null,
+          "assignee": "me"
+        },
+        {
+          "text": "сделать задачу 3",
+          "deadline": null,
+          "assignee": "me"
+        },
+        {
+          "text": "сделать задачу 4",
+          "deadline": null,
+          "assignee": "me"
+        }
+      ],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "amounts": [],
+        "dates": []
+      },
+      "intent": "request",
+      "tone": "formal",
+      "reply_required": true,
+      "deadline": null,
+      "summary_one_line": "Прошу сделать задачу 0"
+    }
+  },
+  "extract_method_01": {
+    "extraction": {
+      "action_items": [
+        {
+          "text": "согласовать договор",
+          "deadline": null,
+          "assignee": "me"
+        }
+      ],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "amounts": [],
+        "dates": []
+      },
+      "intent": "request",
+      "tone": "formal",
+      "reply_required": true,
+      "deadline": null,
+      "summary_one_line": "Нужно согласовать договор"
+    }
+  },
+  "extract_roundtrip_01": {
+    "extraction": {
+      "action_items": [
+        {
+          "text": "согласовать повестку",
+          "deadline": null,
+          "assignee": "me"
+        }
+      ],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "amounts": [],
+        "dates": []
+      },
+      "intent": "meeting",
+      "tone": "formal",
+      "reply_required": false,
+      "deadline": null,
+      "summary_one_line": "Встреча в пятницу, нужно согласовать повестку"
+    }
+  },
+  "extract_force_01": {
+    "extraction": {
+      "action_items": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "amounts": [],
+        "dates": []
+      },
+      "intent": "info",
+      "tone": "formal",
+      "reply_required": true,
+      "deadline": null,
+      "summary_one_line": "Срочное письмо: подтвердите участие в совещании"
+    }
+  },
+  "cache_clear_test_01": {
+    "extraction": {
+      "action_items": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "amounts": [],
+        "dates": []
+      },
+      "intent": "info",
+      "tone": "formal",
+      "reply_required": false,
+      "deadline": null,
+      "summary_one_line": "Тестовое письмо для кэша"
+    }
+  },
+  "extract_clear_cycle_01": {
+    "extraction": {
+      "action_items": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "amounts": [],
+        "dates": []
+      },
+      "intent": "info",
+      "tone": "formal",
+      "reply_required": false,
+      "deadline": null,
+      "summary_one_line": "Совещание по проекту в четверг"
+    }
+  }
+}
