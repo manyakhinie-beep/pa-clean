@@ -21,6 +21,8 @@ let _activeIdx  = -1;
 let _filter     = 'all';
 let _sortBy     = 'date';    // 'date' | 'priority'
 let _search     = '';        // quick search query — filters _items by ФИО/тема/превью
+let _groupByThread = true;   // Outlook-style Conversations view (default on)
+let _expandedThreads = new Set();  // thread_id values currently expanded
 let _ctx        = null;
 let _summaryCache    = {};   // item_id → summary string
 let _suggestCache    = {};   // item_id → { next_actions, tag_suggestions }
@@ -136,77 +138,228 @@ function renderList() {
     return;
   }
 
-  container.innerHTML = visible.map((item) => {
-    const i = _items.indexOf(item);
-    const active  = i === _activeIdx ? ' ib-item--active'  : '';
-    const read    = item.read        ? ' ib-item--read'    : '';
-    const urgent  = item.is_urgent   ? ' ib-item--urgent'  : '';
-    const tags    = renderTagBadges(item.tags);
-    const typeIcon = item.type === 'meeting'
-      ? '<svg class="ib-item-type-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z"/></svg>'
-      : '';
-    const unreadDot = !item.read
-      ? '<span class="ib-unread-dot" aria-label="Непрочитано"></span>'
-      : '';
-
-    // Extraction badges from cached data
-    const extr = item.extraction || _extractCache[item.id];
-    const intentMeta = extr ? (INTENT_META[extr.intent] || INTENT_META.unknown) : null;
-    const intentBadge = intentMeta && intentMeta.emoji
-      ? `<span class="ib-intent-badge ${_esc(intentMeta.cls)}" title="${_esc(intentMeta.label)}">${intentMeta.emoji}</span>`
-      : '';
-    const replyBadge = extr?.reply_required
-      ? '<span class="ib-reply-badge" title="Ожидает ответа">💬</span>'
-      : '';
-    const actionsBadge = extr?.action_items?.length
-      ? `<span class="ib-actions-badge" title="${extr.action_items.length} задач">📋${extr.action_items.length}</span>`
-      : '';
-
-    // Priority bar — only when priority > 0
-    const prio = item.priority || 0;
-    const prioLabel = item.priority_label || 'low';
-    const prioBar = prio > 0
-      ? `<div class="ib-priority-bar ib-priority-bar--${_esc(prioLabel)}" style="--prio:${prio}" title="Приоритет: ${prio}/100" aria-label="Приоритет ${prio}"></div>`
-      : '<div class="ib-priority-bar ib-priority-bar--none"></div>';
-
-    // Follow-up bell
-    const followupBadge = item.followup_needed
-      ? '<span class="ib-followup-badge" title="Ожидает вашего ответа">🔔</span>'
-      : '';
-
-    // Stage 8: AI badge — shown when item has 'ai_classified' tag
-    const isAIClassified = Array.isArray(item.tags) && item.tags.some(t => {
-      const label = t.label || t.cls || String(t);
-      return label === 'ai_classified' || (t.cls && t.cls === 'ai_classified');
+  // Flat OR grouped rendering depending on _groupByThread.
+  if (_groupByThread) {
+    container.innerHTML = _renderThreadGroups(visible);
+    _wireThreadGroupHandlers(container);
+  } else {
+    container.innerHTML = visible.map(item => _renderItemHtml(item, false)).join('');
+    container.querySelectorAll('.ib-item').forEach(el => {
+      el.addEventListener('click', () => {
+        const idx = parseInt(el.dataset.idx, 10);
+        selectItem(idx);
+      });
     });
-    const aiBadge = isAIClassified
-      ? '<span class="ib-ai-badge" title="Классифицировано ИИ">🤖</span>'
+  }
+}
+
+/** Render a single inbox row.  Used for both flat lists and inside expanded
+ *  thread groups (with ``inThread=true`` for slight indentation). */
+function _renderItemHtml(item, inThread = false) {
+  const i = _items.indexOf(item);
+  const active  = i === _activeIdx ? ' ib-item--active'  : '';
+  const read    = item.read        ? ' ib-item--read'    : '';
+  const urgent  = item.is_urgent   ? ' ib-item--urgent'  : '';
+  const indent  = inThread         ? ' ib-item--in-thread' : '';
+  const tags    = renderTagBadges(item.tags);
+  const typeIcon = item.type === 'meeting'
+    ? '<svg class="ib-item-type-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z"/></svg>'
+    : '';
+  const unreadDot = !item.read
+    ? '<span class="ib-unread-dot" aria-label="Непрочитано"></span>'
+    : '';
+
+  // Extraction badges from cached data
+  const extr = item.extraction || _extractCache[item.id];
+  const intentMeta = extr ? (INTENT_META[extr.intent] || INTENT_META.unknown) : null;
+  const intentBadge = intentMeta && intentMeta.emoji
+    ? `<span class="ib-intent-badge ${_esc(intentMeta.cls)}" title="${_esc(intentMeta.label)}">${intentMeta.emoji}</span>`
+    : '';
+  const replyBadge = extr?.reply_required
+    ? '<span class="ib-reply-badge" title="Ожидает ответа">💬</span>'
+    : '';
+  const actionsBadge = extr?.action_items?.length
+    ? `<span class="ib-actions-badge" title="${extr.action_items.length} задач">📋${extr.action_items.length}</span>`
+    : '';
+
+  // Priority bar — only when priority > 0
+  const prio = item.priority || 0;
+  const prioLabel = item.priority_label || 'low';
+  const prioBar = prio > 0
+    ? `<div class="ib-priority-bar ib-priority-bar--${_esc(prioLabel)}" style="--prio:${prio}" title="Приоритет: ${prio}/100" aria-label="Приоритет ${prio}"></div>`
+    : '<div class="ib-priority-bar ib-priority-bar--none"></div>';
+
+  // Follow-up bell
+  const followupBadge = item.followup_needed
+    ? '<span class="ib-followup-badge" title="Ожидает вашего ответа">🔔</span>'
+    : '';
+
+  // Stage 8: AI badge — shown when item has 'ai_classified' tag
+  const isAIClassified = Array.isArray(item.tags) && item.tags.some(t => {
+    const label = t.label || t.cls || String(t);
+    return label === 'ai_classified' || (t.cls && t.cls === 'ai_classified');
+  });
+  const aiBadge = isAIClassified
+    ? '<span class="ib-ai-badge" title="Классифицировано ИИ">🤖</span>'
+    : '';
+
+  return `
+  <div class="ib-item${active}${read}${urgent}${indent}" data-idx="${i}" data-id="${_esc(item.id)}">
+    ${prioBar}
+    <label class="ib-item-check" onclick="event.stopPropagation()">
+      <input type="checkbox" class="ib-checkbox" data-id="${_esc(item.id)}">
+      <span class="ib-checkbox-ui"></span>
+    </label>
+    <div class="ib-avatar" style="background:${item.sender_color}">${_esc(item.sender_initials)}</div>
+    <div class="ib-item-body">
+      <div class="ib-item-top">
+        ${unreadDot}
+        <span class="ib-item-sender">${_esc(item.sender_name)}</span>
+        ${item.sender_role ? `<span class="ib-item-role">${_esc(item.sender_role)}</span>` : ''}
+        <span class="ib-item-badges">${intentBadge}${replyBadge}${actionsBadge}${followupBadge}${aiBadge}</span>
+        <span class="ib-item-time">${_esc(item.time_label)}</span>
+      </div>
+      <div class="ib-item-subject">${typeIcon}${_esc(item.subject)}</div>
+      ${tags ? `<div class="ib-item-tags">${tags}</div>` : ''}
+    </div>
+  </div>`;
+}
+
+// ---------------------------------------------------------------------------
+// Thread grouping ("Беседы" view, like Outlook Conversations)
+// ---------------------------------------------------------------------------
+
+/** Strip "Re: " / "Fwd: " / "Отв: " / "Пер: " prefixes for thread subject. */
+function _cleanSubject(s) {
+  return String(s || '').replace(/^\s*(?:re|fwd?|отв|пер|aw|tr|sv)\s*(?:\[\d+\])?\s*:\s*/i, '').trim();
+}
+
+/** Group visible items by ``thread_id``.  Items without a thread_id are
+ *  treated as their own single-message threads (key = item.id). Returns
+ *  groups in latest-activity-first order; each group has its messages
+ *  sorted newest-first. */
+function _groupVisibleByThread(visible) {
+  const groups = new Map();
+  visible.forEach(item => {
+    const key = (item.thread_id && String(item.thread_id).trim()) || `__single__:${item.id}`;
+    if (!groups.has(key)) {
+      groups.set(key, { thread_id: key, messages: [] });
+    }
+    groups.get(key).messages.push(item);
+  });
+
+  const result = [];
+  groups.forEach(g => {
+    // Newest first inside the group — matches Mail.app and Outlook default.
+    g.messages.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+    const latest = g.messages[0];
+    g.subject = _cleanSubject(latest.subject || '');
+    g.latest = latest;
+    g.unread_count = g.messages.filter(m => !m.read).length;
+    g.urgent_count = g.messages.filter(m => m.is_urgent).length;
+    g.followup_count = g.messages.filter(m => m.followup_needed).length;
+    // Deduplicate sender list — keep order of first appearance
+    const seen = new Set();
+    g.senders = [];
+    g.messages.forEach(m => {
+      const name = m.sender_name || m.sender_email || '?';
+      if (!seen.has(name)) {
+        seen.add(name);
+        g.senders.push(name);
+      }
+    });
+    result.push(g);
+  });
+
+  // Threads with most recent activity first.
+  result.sort((a, b) => String(b.latest.date || '').localeCompare(String(a.latest.date || '')));
+  return result;
+}
+
+/** HTML for a thread group header + expanded children when applicable. */
+function _renderThreadGroups(visible) {
+  const groups = _groupVisibleByThread(visible);
+  if (!groups.length) return '';
+
+  return groups.map(g => {
+    const isSingle = g.messages.length === 1;
+    const expanded = isSingle || _expandedThreads.has(g.thread_id);
+    // For single-message threads, just render the row directly (no chevron).
+    if (isSingle) {
+      return _renderItemHtml(g.latest, false);
+    }
+
+    const latest = g.latest;
+    const i = _items.indexOf(latest);
+    const sendersText = g.senders.slice(0, 3).join(', ') +
+      (g.senders.length > 3 ? ` +${g.senders.length - 3}` : '');
+    const unreadBadge = g.unread_count
+      ? `<span class="ib-thread-unread" title="${g.unread_count} непрочитанных">${g.unread_count}</span>`
+      : '';
+    const urgentChip = g.urgent_count
+      ? '<span class="ib-thread-urgent" title="Срочно в треде">🔴</span>'
+      : '';
+    const followupChip = g.followup_count
+      ? '<span class="ib-thread-followup" title="Ожидает ответа">🔔</span>'
+      : '';
+    const chevron = expanded ? '▾' : '▸';
+
+    const childrenHtml = expanded
+      ? `<div class="ib-thread-children">${
+          g.messages.map(m => _renderItemHtml(m, true)).join('')
+        }</div>`
       : '';
 
     return `
-    <div class="ib-item${active}${read}${urgent}" data-idx="${i}" data-id="${_esc(item.id)}">
-      ${prioBar}
-      <label class="ib-item-check" onclick="event.stopPropagation()">
-        <input type="checkbox" class="ib-checkbox" data-id="${_esc(item.id)}">
-        <span class="ib-checkbox-ui"></span>
-      </label>
-      <div class="ib-avatar" style="background:${item.sender_color}">${_esc(item.sender_initials)}</div>
-      <div class="ib-item-body">
-        <div class="ib-item-top">
-          ${unreadDot}
-          <span class="ib-item-sender">${_esc(item.sender_name)}</span>
-          ${item.sender_role ? `<span class="ib-item-role">${_esc(item.sender_role)}</span>` : ''}
-          <span class="ib-item-badges">${intentBadge}${replyBadge}${actionsBadge}${followupBadge}${aiBadge}</span>
-          <span class="ib-item-time">${_esc(item.time_label)}</span>
+    <div class="ib-thread${expanded ? ' ib-thread--expanded' : ''}"
+         data-thread-id="${_esc(g.thread_id)}"
+         data-latest-idx="${i}">
+      <div class="ib-thread-header" role="button" tabindex="0">
+        <span class="ib-thread-chevron">${chevron}</span>
+        <div class="ib-avatar ib-thread-avatar" style="background:${latest.sender_color}">${_esc(latest.sender_initials)}</div>
+        <div class="ib-thread-body">
+          <div class="ib-thread-top">
+            ${g.unread_count ? '<span class="ib-unread-dot"></span>' : ''}
+            <span class="ib-thread-senders">${_esc(sendersText)}</span>
+            <span class="ib-thread-badges">${urgentChip}${followupChip}${unreadBadge}</span>
+            <span class="ib-item-time">${_esc(latest.time_label)}</span>
+          </div>
+          <div class="ib-thread-subject">
+            <span class="ib-thread-count">[${g.messages.length}]</span>
+            ${_esc(g.subject || '(без темы)')}
+          </div>
         </div>
-        <div class="ib-item-subject">${typeIcon}${_esc(item.subject)}</div>
-        ${tags ? `<div class="ib-item-tags">${tags}</div>` : ''}
       </div>
+      ${childrenHtml}
     </div>`;
   }).join('');
+}
 
-  // Click handlers
-  container.querySelectorAll('.ib-item').forEach(el => {
+/** Wire click handlers for thread headers + child items. */
+function _wireThreadGroupHandlers(container) {
+  container.querySelectorAll('.ib-thread-header').forEach(el => {
+    const parent = el.closest('.ib-thread');
+    if (!parent) return;
+    const tid = parent.dataset.threadId;
+    const onToggle = () => {
+      if (_expandedThreads.has(tid)) _expandedThreads.delete(tid);
+      else _expandedThreads.add(tid);
+      renderList();
+    };
+    el.addEventListener('click', onToggle);
+    el.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); }
+    });
+  });
+  // Child item clicks open the message detail.
+  container.querySelectorAll('.ib-thread .ib-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const idx = parseInt(el.dataset.idx, 10);
+      selectItem(idx);
+    });
+  });
+  // Single-message "threads" rendered flat — same click as flat list.
+  container.querySelectorAll(':scope > .ib-item').forEach(el => {
     el.addEventListener('click', () => {
       const idx = parseInt(el.dataset.idx, 10);
       selectItem(idx);
@@ -1286,6 +1439,54 @@ function setupFilterTabs() {
       sortBtn.classList.toggle('ib-sort-toggle--active', _sortBy === 'priority');
       _activeIdx = -1;
       loadInbox(_filter, _sortBy);
+    });
+  }
+
+  // Thread-grouping toggle (Outlook Conversations view).
+  const groupBtn = document.getElementById('ib-group-toggle');
+  if (groupBtn) {
+    groupBtn.addEventListener('click', () => {
+      _groupByThread = !_groupByThread;
+      groupBtn.classList.toggle('ib-group-toggle--active', _groupByThread);
+      groupBtn.textContent = _groupByThread ? '🧵 Беседы' : '☰ Список';
+      groupBtn.title = _groupByThread
+        ? 'Сейчас: треды свёрнуты по теме (как в Outlook «Беседы»). Кликни, чтобы переключиться на плоский список.'
+        : 'Сейчас: плоский список. Кликни, чтобы сгруппировать письма по треду.';
+      // Reset expanded state when switching modes — start clean
+      _expandedThreads.clear();
+      renderList();
+    });
+  }
+
+  // Mark-all-read toolbar button: bulk-update every currently-visible
+  // unread item via one /mark-read-batch call.  After success, the
+  // affected items are flipped locally so the user sees instant feedback
+  // without waiting for a full inbox reload.
+  const markAllBtn = document.getElementById('ib-mark-all-read');
+  if (markAllBtn) {
+    markAllBtn.addEventListener('click', async () => {
+      const visible = _filteredItems().filter(it => !it.read);
+      if (!visible.length) {
+        _ctx?.showToast?.('Все письма уже прочитаны', 'info');
+        return;
+      }
+      const ids = visible.map(it => it.id);
+      const orig = markAllBtn.textContent;
+      markAllBtn.disabled = true;
+      markAllBtn.textContent = '⏳';
+      try {
+        const res = await api.inboxMarkReadBatch(ids, true);
+        // Flip read flag locally (mutate _items so renders + stats update)
+        const idSet = new Set(ids);
+        _items.forEach(it => { if (idSet.has(it.id)) it.read = true; });
+        renderList();
+        _ctx?.showToast?.(`Отмечено прочитанными: ${res.updated || ids.length}`, 'success');
+      } catch (err) {
+        _ctx?.showToast?.('Ошибка: ' + err.message, 'error');
+      } finally {
+        markAllBtn.disabled = false;
+        markAllBtn.textContent = orig;
+      }
     });
   }
 }

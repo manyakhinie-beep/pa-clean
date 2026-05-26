@@ -640,6 +640,33 @@ def mark_unread(item_id: str):
     return {"id": item_id, "read": False, "state": st}
 
 
+class MarkReadBatchRequest(BaseModel):
+    item_ids: list[str] = []
+    read: bool = True
+
+
+@router.post("/mark-read-batch")
+def mark_read_batch(req: MarkReadBatchRequest):
+    """Bulk mark items as read/unread.
+
+    Powers the "Прочитать все" toolbar button in the WebUI — the frontend
+    sends every visible item_id in one call so the request count stays
+    bounded even when a user has hundreds of unread messages.
+
+    Items missing from ``item_ids`` are untouched.  Empty list is a no-op.
+    """
+    updated = 0
+    for iid in req.item_ids:
+        if not iid:
+            continue
+        try:
+            _update_item_state(iid, {"read": req.read})
+            updated += 1
+        except Exception as exc:  # noqa: BLE001 — never fail batch on one item
+            logger.warning(f"[inbox] mark-read-batch skip {iid!r}: {exc}")
+    return {"updated": updated, "total_requested": len(req.item_ids), "read": req.read}
+
+
 class TagsRequest(BaseModel):
     tags: list[str]
     mode: str = "set"   # "set" | "append"

@@ -206,6 +206,7 @@ export const api = {
   inboxSummarize:     (body)                    => post('/api/v1/inbox/summarize', body),
   inboxMarkRead:        (id)                      => post(`/api/v1/inbox/${encodeURIComponent(id)}/read`),
   inboxMarkUnread:      (id)                      => post(`/api/v1/inbox/${encodeURIComponent(id)}/unread`),
+  inboxMarkReadBatch:   (item_ids, read=true)       => post('/api/v1/inbox/mark-read-batch', { item_ids, read }),
   inboxSetTags:         (id, tags, mode='set')    => post(`/api/v1/inbox/${encodeURIComponent(id)}/tags`, { tags, mode }),
   inboxAssignProject:   (id, project_id, project_name) => post(`/api/v1/inbox/${encodeURIComponent(id)}/assign-project`, { project_id, project_name }),
   inboxSuggestions:     (id)                      => get(`/api/v1/inbox/${encodeURIComponent(id)}/suggestions`),

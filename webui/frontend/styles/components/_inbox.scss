@@ -144,6 +144,146 @@
   &--active      { background: var(--primary-light); color: var(--primary); font-weight: $fw-semibold; }
 }
 
+// ── Group toggle + Mark-all-read toolbar buttons ─────────────────────────────
+.ib-group-toggle,
+.ib-mark-all-read {
+  padding: 4px $sp-3;
+  border: 1px solid var(--color-border);
+  border-radius: $r-md;
+  font-size: $size-sm;
+  font-weight: $fw-medium;
+  color: var(--color-text-muted);
+  background: var(--color-surface, #fff);
+  cursor: pointer;
+  transition: background $t, color $t, border-color $t;
+  margin-left: 6px;
+
+  &:hover {
+    background: var(--color-bg);
+    color: var(--color-text);
+  }
+
+  &:disabled {
+    opacity: .5;
+    cursor: not-allowed;
+  }
+}
+
+.ib-group-toggle--active {
+  background: var(--primary-light);
+  color: var(--primary);
+  border-color: var(--primary);
+  font-weight: $fw-semibold;
+}
+
+// ── Thread groups ("Беседы") ─────────────────────────────────────────────────
+.ib-thread {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.ib-thread-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background $t;
+
+  &:hover { background: var(--color-bg); }
+  &:focus-visible {
+    outline: 2px solid var(--primary, #0066ff);
+    outline-offset: -2px;
+  }
+}
+
+.ib-thread-chevron {
+  width: 14px;
+  flex-shrink: 0;
+  color: var(--color-text-faint);
+  font-size: 11px;
+  margin-top: 4px;
+  text-align: center;
+  user-select: none;
+}
+
+.ib-thread-avatar {
+  flex-shrink: 0;
+}
+
+.ib-thread-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.ib-thread-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.ib-thread-senders {
+  flex: 1;
+  min-width: 0;
+  font-weight: $fw-semibold;
+  font-size: $size-sm;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ib-thread-badges {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-shrink: 0;
+  font-size: 11px;
+}
+
+.ib-thread-unread {
+  background: var(--primary, #0066ff);
+  color: #fff;
+  padding: 1px 7px;
+  border-radius: 9px;
+  font-size: 10px;
+  font-weight: $fw-semibold;
+  line-height: 1.4;
+}
+
+.ib-thread-subject {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ib-thread-count {
+  display: inline-block;
+  margin-right: 4px;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--color-bg, rgba(0,0,0,.05));
+  color: var(--color-text-faint);
+  font-size: 10px;
+  font-weight: $fw-semibold;
+}
+
+.ib-thread-children {
+  background: var(--color-bg, rgba(0,0,0,.02));
+  border-top: 1px solid var(--color-border);
+}
+
+// Indented child rows inside expanded threads.
+.ib-item--in-thread {
+  padding-left: 28px;
+  background: transparent;
+  border-bottom: 1px solid var(--color-border);
+
+  &:last-child { border-bottom: none; }
+}
+
 // ── Quick search bar ──────────────────────────────────────────────────────────
 .ib-search {
   position: relative;
