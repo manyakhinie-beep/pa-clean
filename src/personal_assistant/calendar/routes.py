@@ -110,19 +110,12 @@ def _scan_upcoming_events(
         try:
             import unicodedata
 
-            import yaml as _yaml
+            from personal_assistant.utils.frontmatter import parse_lenient
 
-            # Parse frontmatter
-            if not raw.startswith("---"):
-                continue
-            end = raw.find("\n---", 3)
-            if end == -1:
-                continue
-            try:
-                fm = _yaml.safe_load(raw[3:end]) or {}
-            except Exception:
-                fm = {}
-            if not isinstance(fm, dict):
+            # Tolerant parse — falls back to repair if legacy vault files
+            # have run-on YAML from the old event.md.j2 template.
+            fm = parse_lenient(raw)
+            if not fm:
                 continue
 
             date_str = str(fm.get("date") or fm.get("start") or "")

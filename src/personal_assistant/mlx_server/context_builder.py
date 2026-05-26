@@ -66,15 +66,14 @@ def _now_str() -> str:
 
 
 def _parse_frontmatter(text: str) -> tuple[dict, str]:
+    # Lenient parser repairs legacy run-on YAML from the old event.md.j2 bug
+    # so affected vault snippets still surface in chat context.
+    from personal_assistant.utils.frontmatter import parse_lenient
+
     if text.startswith("---"):
         end = text.find("\n---", 3)
         if end != -1:
-            try:
-                import yaml as _yaml
-
-                fm = _yaml.safe_load(text[3:end]) or {}
-            except Exception:
-                fm = {}
+            fm = parse_lenient(text)
             return fm, text[end + 4 :].strip()
     return {}, text.strip()
 

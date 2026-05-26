@@ -18,7 +18,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-import yaml
 from loguru import logger
 
 from personal_assistant.config import settings
@@ -157,15 +156,17 @@ _FM_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 
 
 def _parse_frontmatter(text: str) -> tuple[dict, str]:
-    """Split YAML frontmatter from body. Returns (meta_dict, body_str)."""
+    """Split YAML frontmatter from body. Returns (meta_dict, body_str).
+
+    Tolerant of legacy run-on YAML (old event.md.j2 template bug) so events
+    with broken frontmatter still get indexed by BM25 and surface in search.
+    """
+    from personal_assistant.utils.frontmatter import parse_lenient_text
+
     m = _FM_RE.match(text)
     if not m:
         return {}, text
-    try:
-        meta = yaml.safe_load(m.group(1)) or {}
-    except yaml.YAMLError as e:
-        logger.debug(f"YAML parse error in frontmatter: {e}")
-        meta = {}
+    meta = parse_lenient_text(m.group(1))
     body = text[m.end() :]
     return meta, body
 

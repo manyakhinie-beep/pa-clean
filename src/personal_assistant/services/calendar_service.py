@@ -304,7 +304,19 @@ def find_conflicts(start_iso: str, end_iso: str, events: list[dict]) -> list[dic
 
 
 def _parse_frontmatter(text: str) -> dict:
-    """Parse YAML frontmatter between first pair of ``---`` delimiters."""
+    """Parse YAML frontmatter between first pair of ``---`` delimiters.
+
+    Uses the lenient parser so legacy vault files written by the old
+    event.md.j2 template (run-on ``location:"X"tags:[...]`` YAML) are still
+    extracted rather than dropped silently.
+    """
+    from personal_assistant.utils.frontmatter import parse_lenient  # noqa: PLC0415
+
+    return parse_lenient(text)
+
+
+def _parse_frontmatter_legacy(text: str) -> dict:
+    """Original strict parser, kept for compatibility tests."""
     import yaml  # noqa: PLC0415
 
     if not text.startswith("---"):
