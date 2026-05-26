@@ -12,7 +12,7 @@ Current stubs (ready for full implementation):
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -201,7 +201,10 @@ def fetch_upcoming_events(
     if not cal_path.exists():
         return []
 
-    now = datetime.now()
+    # TZ-aware: vault md files store ISO-with-offset (e.g. ``+00:00``).
+    # Comparing against ``datetime.now()`` (naive local) drops the event when
+    # the local-time offset crosses a day boundary. Use UTC throughout.
+    now = datetime.now(timezone.utc)
     cutoff = now + timedelta(days=days_forward)
 
     results: list[dict] = []
@@ -209,17 +212,19 @@ def fetch_upcoming_events(
         try:
             text = md_file.read_text(encoding="utf-8")
             fm = _parse_frontmatter(text)
-            date_str = fm.get("date", "")
+            # Calendar md frontmatter uses ``start`` (mirrors vCalendar field);
+            # some legacy entries may have ``date``. Accept either.
+            date_str = str(fm.get("date") or fm.get("start") or "")
             if not date_str:
                 continue
-            # Parse ISO date / datetime
+            # Parse ISO date / datetime — assume UTC when offset missing.
             try:
-                event_dt = datetime.fromisoformat(str(date_str).replace("Z", "+00:00"))
-                # Make naive for comparison
-                event_dt_naive = event_dt.replace(tzinfo=None)
+                event_dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+                if event_dt.tzinfo is None:
+                    event_dt = event_dt.replace(tzinfo=timezone.utc)
             except ValueError:
                 continue
-            if not (now <= event_dt_naive <= cutoff):
+            if not (now <= event_dt <= cutoff):
                 continue
             body_start = text.find("\n---\n", text.find("---") + 3)
             body = text[body_start + 5:].strip() if body_start != -1 else ""

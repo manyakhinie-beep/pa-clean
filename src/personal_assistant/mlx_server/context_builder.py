@@ -432,6 +432,39 @@ class ContextAssembler:
         if thread_context_block:
             parts.append(thread_context_block)
 
+        # Calendar context — always inject upcoming vault events for chat/draft
+        # so the model can answer schedule questions ("что у меня завтра?")
+        # WITHOUT relying on BM25 matching the user's natural-language query
+        # against event titles. Without this block the model hallucinates a
+        # plausible Russian schedule when asked about an unmatched date.
+        if mode in ("chat", "draft"):
+            try:
+                from personal_assistant.services.calendar_service import (
+                    fetch_upcoming_events,
+                )
+
+                upcoming = fetch_upcoming_events(days_forward=7)
+                parts.append("\n--- КАЛЕНДАРЬ: ВСЕ СОБЫТИЯ НА 7 ДНЕЙ ВПЕРЁД ---")
+                if upcoming:
+                    for ev in upcoming[:30]:
+                        title = ev.get("title") or "(без названия)"
+                        date_s = ev.get("date") or ""
+                        loc = ev.get("location") or ""
+                        loc_part = f" — {loc}" if loc else ""
+                        parts.append(f"- {date_s}: {title}{loc_part}")
+                else:
+                    parts.append("(на ближайшие 7 дней событий в vault не найдено)")
+                parts.append("--- /КАЛЕНДАРЬ ---")
+                parts.append(
+                    "Это ЕДИНСТВЕННЫЙ источник данных о расписании пользователя. "
+                    "Если запрашиваемая дата НЕ упомянута в блоке КАЛЕНДАРЬ выше — "
+                    "ответь честно: «на эту дату событий не запланировано» или "
+                    "«в vault нет данных за этот период». НЕ ВЫДУМЫВАЙ события "
+                    "(встречи, звонки, ланчи и т.п.) которых нет в блоке выше."
+                )
+            except Exception as exc:
+                logger.debug(f"[context_builder] calendar fetch failed: {exc}")
+
         # Vault context
         if vault_refs:
             parts.append("\n--- КОНТЕКСТ ИЗ PERSONALVAULT ---")
