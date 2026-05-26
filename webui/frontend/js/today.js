@@ -190,6 +190,40 @@ export function initToday(ctx) {
     }
   }
 
+  // Local-date helpers — keep the user's wall-clock in charge, not UTC.
+  function _localDate(isoString) {
+    if (!isoString) return null;
+    const d = new Date(isoString);
+    if (Number.isNaN(d.getTime())) return null;
+    return d;
+  }
+  function _localDateKey(d) {
+    if (!d) return '';
+    // YYYY-MM-DD in the browser's local timezone
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dd}`;
+  }
+  function _dayLabel(isoString) {
+    const d = _localDate(isoString);
+    if (!d) return '';
+    const today = new Date();
+    const todayKey = _localDateKey(today);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+    const tomorrowKey = _localDateKey(tomorrow);
+    const dKey = _localDateKey(d);
+    if (dKey === todayKey) return 'today';
+    if (dKey === tomorrowKey) return 'tomorrow';
+    return 'later';
+  }
+  function _dayHeader(group) {
+    if (group === 'today')    return '🔆 Сегодня';
+    if (group === 'tomorrow') return '📅 Завтра';
+    return '🗓 Позже на этой неделе';
+  }
+
   function renderUpcomingMeetings(events, container) {
     if (!events.length) { container.style.display = 'none'; return; }
     container.style.display = '';
@@ -201,38 +235,60 @@ export function initToday(ctx) {
     if (!listEl) return;
     listEl.innerHTML = '';
 
+    // Group events into today / tomorrow / later. With many meetings on the
+    // calendar (10+), today's events were getting buried in a flat list —
+    // now they sit prominently at the top with their own header.
+    const groups = { today: [], tomorrow: [], later: [] };
     events.forEach(ev => {
-      const card = document.createElement('div');
-      card.className = 'today__meeting-card';
+      const g = _dayLabel(ev.date);
+      (groups[g] || groups.later).push(ev);
+    });
 
-      const pCount = ev.participant_count || (ev.participants || []).length;
-      const subParts = [
-        pCount ? `${pCount} участн.` : '',
-        ev.location ? `📍 ${ev.location}` : '',
-      ].filter(Boolean);
+    const order = ['today', 'tomorrow', 'later'];
+    order.forEach(group => {
+      const items = groups[group];
+      if (!items.length) return;
 
-      card.innerHTML =
-        `<div class="today__meeting-header">` +
-          `<div class="today__meeting-time">${_esc(ev.relative || ev.date?.slice(0,10) || '')}</div>` +
-          `<div class="today__meeting-title">${_esc(ev.title)}</div>` +
-        `</div>` +
-        (subParts.length ? `<div class="today__meeting-sub">${_esc(subParts.join(' · '))}</div>` : '') +
-        `<div class="today__meeting-actions">` +
-          `<button class="today__meeting-prep-btn btn btn--xs btn--secondary" ` +
-            `data-event-id="${_esc(ev.id)}" ` +
-            `title="Собрать контекст и открыть чат для подготовки к встрече">` +
-            `Подготовиться` +
-          `</button>` +
-        `</div>`;
+      const header = document.createElement('div');
+      header.className = `today__meetings-group-header today__meetings-group-header--${group}`;
+      header.innerHTML =
+        `<span class="today__meetings-group-title">${_dayHeader(group)}</span>` +
+        `<span class="today__meetings-group-count">${items.length}</span>`;
+      listEl.appendChild(header);
 
-      card.querySelector('.today__meeting-prep-btn')
-        ?.addEventListener('click', async e => {
-          e.stopPropagation();
-          const btn = e.currentTarget;
-          _openMeetingPrep(ev.id, ev.title, btn);
-        });
+      items.forEach(ev => {
+        const card = document.createElement('div');
+        card.className = `today__meeting-card today__meeting-card--${group}`;
 
-      listEl.appendChild(card);
+        const pCount = ev.participant_count || (ev.participants || []).length;
+        const subParts = [
+          pCount ? `${pCount} участн.` : '',
+          ev.location ? `📍 ${ev.location}` : '',
+        ].filter(Boolean);
+
+        card.innerHTML =
+          `<div class="today__meeting-header">` +
+            `<div class="today__meeting-time">${_esc(ev.relative || ev.date?.slice(0,10) || '')}</div>` +
+            `<div class="today__meeting-title">${_esc(ev.title)}</div>` +
+          `</div>` +
+          (subParts.length ? `<div class="today__meeting-sub">${_esc(subParts.join(' · '))}</div>` : '') +
+          `<div class="today__meeting-actions">` +
+            `<button class="today__meeting-prep-btn btn btn--xs btn--secondary" ` +
+              `data-event-id="${_esc(ev.id)}" ` +
+              `title="Собрать контекст и открыть чат для подготовки к встрече">` +
+              `Подготовиться` +
+            `</button>` +
+          `</div>`;
+
+        card.querySelector('.today__meeting-prep-btn')
+          ?.addEventListener('click', async e => {
+            e.stopPropagation();
+            const btn = e.currentTarget;
+            _openMeetingPrep(ev.id, ev.title, btn);
+          });
+
+        listEl.appendChild(card);
+      });
     });
   }
 
