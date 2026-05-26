@@ -136,3 +136,5 @@ pa.log
 *.temp
 .cache/
 tmp/
+data/inbox_state.json
+souls.md
