@@ -103,7 +103,7 @@
 | P11 | Флаки-тесты по времени суток | 🟢 решено | `test_daily_brief` (`_iso_today_at`) |
 | P12 | macOS-only тесты патчили неверный таргет | 🟢 решено | `test_mail_service_fix.py` |
 | P13 | `mypy`-долг (type-check non-blocking в CI) | 🟢 решено | `mypy src` — 0 ошибок, блокирующий гейт |
-| P14 | Покрытие 80% (цель инструкции) | 🟡 re-baseline | **61.6%** (hermetic: unit+e2e+scenario-not-live). 80% упирается в live-only модули: `webui/routes.py` (1308 строк, endpoints триггерят MLX/AppleScript), `cli.py` (476 строк, click), `scheduler.py` (cron pipeline), `vector_index.py` (sentence-transformers). Core (vault/sync/threads/config/models/rules/services) ≥70%. Рост дальше — через live-suite на Mac. Baseline 61.6% зафиксирован; 80% — stretch goal. |
+| P14 | Покрытие 80% (цель инструкции) | 🟡 re-baseline | **64.9%** (hermetic: unit+e2e+scenario-not-live, после +49 тестов `test_cli.py` + `test_webui_endpoints_coverage.py`). cli.py: 0% → **71.1%**; webui/routes.py: 46.8% → **48.4%**. 80% упирается в endpoints с `e2e_test_mode`-guard'ом by design (`/sync`, `/run-pipeline`, `/index/build`, `/classify/llm-batch`, `/model/pull`) + live-only пути (MLX/AppleScript). Core (vault/sync/threads/config/models/rules/services) ≥70%. Дальнейший рост — только через live-suite на Mac. Baseline 64.9% зафиксирован; 80% — stretch goal. |
 | P15 | `summarize_system` как единый канон промта | 🟢 решено | `tool_prompts.py`; `mail_summary_prompt` удалён |
 
 ---
