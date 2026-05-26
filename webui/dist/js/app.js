@@ -2,7 +2,7 @@
 // app.js — SPA entrypoint: router, nav wiring, server status, theme toggle
 // =============================================================================
 import { api } from './api.js?v=20260520153419';
-import { initChat }     from './chat.js?v=20260520153419';
+import { initChat }     from './chat.js?v=20260526124421';
 import { initVault }    from './vault.js?v=20260520153419';
 import { initProjects } from './projects.js?v=20260520153419';
 import { initSearch }   from './search.js?v=20260520153419';

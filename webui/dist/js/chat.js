@@ -344,13 +344,31 @@ export function initChat(ctx) {
       });
     });
 
-    // Save-to-draft button — always visible regardless of currentMode
+    // Save-to-draft button — one-click: directly call the Mail API.
+    //
+    // Behaviour:
+    //   • If the chat has a reply context (currentReplyMessageId set, e.g.
+    //     opened from inbox or /draft <message>) → the backend wires the
+    //     draft as a reply to that thread; we pre-fetch sender + subject
+    //     so the toast is informative.
+    //   • Otherwise → the draft is created as a new outgoing message; the
+    //     Mail compose window opens so the user can add recipients.
+    //
+    // Power-user override: "✏️ Изменить" beside the button still opens
+    // the full edit panel for tweaking To/CC/Subject/Body before saving.
     const draftBtn = document.createElement('button');
     draftBtn.className = 'chat__bubble-action-btn chat__bubble-action-btn--draft';
-    draftBtn.title = 'Сохранить черновик Mail';
-    draftBtn.textContent = '✉️ Черновик';
-    draftBtn.addEventListener('click', () => {
-      // Remove any existing draft panel from this wrap context first
+    draftBtn.title = currentReplyMessageId
+      ? 'Создать черновик ответа на письмо в Mail'
+      : 'Создать новый черновик в Mail';
+    draftBtn.textContent = currentReplyMessageId ? '↩️ Ответ' : '✉️ Черновик';
+    draftBtn.addEventListener('click', () => _oneClickDraft(draftBtn, textContent, currentReplyMessageId));
+
+    const editBtn = document.createElement('button');
+    editBtn.className = 'chat__bubble-action-btn chat__bubble-action-btn--edit-draft';
+    editBtn.title = 'Открыть редактор черновика';
+    editBtn.textContent = '✏️';
+    editBtn.addEventListener('click', () => {
       const existing = wrapEl.parentElement?.querySelector('.dp');
       if (existing) existing.remove();
       appendDraftEditPanel(wrapEl, textContent, '', currentReplyMessageId);
@@ -358,7 +376,81 @@ export function initChat(ctx) {
 
     bar.appendChild(copyBtn);
     bar.appendChild(draftBtn);
+    bar.appendChild(editBtn);
     return bar;
+  }
+
+  /**
+   * One-click "save draft" action — calls /api/chat/save-draft-mail directly.
+   * Handles both reply-to-thread (when replyMsgId is set) and new-mail flows.
+   */
+  async function _oneClickDraft(btn, body, replyMsgId) {
+    if (!body || !body.trim()) {
+      showToast('Текст пустой', 'warning');
+      return;
+    }
+    const origText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '⏳';
+
+    try {
+      // Derive a fallback subject from the first non-empty line.
+      const firstLine = body.split('\n').find(l => l.trim()) || '';
+      let subject = firstLine.replace(/^#+\s*/, '').trim().slice(0, 120);
+
+      let toRecipients = [];
+      let ccRecipients = [];
+
+      // If this assistant message was generated as a reply to a real Mail
+      // message, fetch the sender/subject so the backend can wire it as
+      // a true reply and the toast is informative.
+      if (replyMsgId) {
+        try {
+          const r = await fetch(
+            `/api/chat/mail/message-meta?message_id=${encodeURIComponent(replyMsgId)}`,
+          );
+          if (r.ok) {
+            const meta = await r.json();
+            if (meta.sender_email) toRecipients = [meta.sender_email];
+            if (Array.isArray(meta.cc) && meta.cc.length) ccRecipients = meta.cc;
+            if (meta.subject) {
+              const cleaned = meta.subject.replace(/^(Re:\s*)+/i, '');
+              subject = cleaned ? `Re: ${cleaned}` : subject;
+            }
+          }
+        } catch (_) {
+          // Fall through with empty recipients — Mail.app will prompt user.
+        }
+      }
+
+      const resp = await fetch('/api/chat/save-draft-mail', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subject:             subject || (replyMsgId ? 'Re:' : 'Без темы'),
+          body:                body.replace(/^#+\s+[^\n]*\n?/, '').trim(),
+          to_recipients:       toRecipients,
+          cc_recipients:       ccRecipients,
+          reply_to_message_id: replyMsgId || null,
+          save_to_drafts:      false,  // open compose window for review
+        }),
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+        throw new Error(err.detail || resp.statusText);
+      }
+
+      const data = await resp.json();
+      showToast(data.message || 'Черновик создан', 'success');
+      btn.textContent = '✓ Открыто';
+      setTimeout(() => { btn.textContent = origText; }, 2500);
+    } catch (err) {
+      showToast('Ошибка создания черновика: ' + err.message, 'error');
+      btn.textContent = origText;
+    } finally {
+      btn.disabled = false;
+    }
   }
 
   function appendStreamingBubble() {
