@@ -47,6 +47,42 @@ else
     echo "======================================================================"
 fi
 
+# ── 0. Префлайт: shell должен быть arm64, не Rosetta ─────────────────────────
+SHELL_ARCH=$(uname -m)
+if [ "$SHELL_ARCH" != "arm64" ]; then
+    echo ""
+    fail "Текущий shell работает в архитектуре $SHELL_ARCH, а pa-clean запинен на arm64
+(mlx-lm имеет колёса только под darwin/arm64).
+
+Скорее всего Terminal/iTerm запущен под Rosetta. Исправьте одним из способов:
+
+  (a) Временный prefix — перезапуск shell в arm64:
+      arch -arm64 zsh
+      uname -m            # должно вернуть arm64
+      ./fix_env.sh --online
+
+  (b) Постоянно — снять Rosetta-флаг с приложения:
+      Quit Terminal/iTerm → Applications → Utilities → Terminal.app →
+      Cmd+I (Get Info) → снять «Open using Rosetta» → запустить заново.
+
+  (c) Если uv-бинарник тоже x86_64 (file \$(which uv) показывает x86_64):
+      rm \$(which uv)
+      arch -arm64 zsh
+      curl -LsSf https://astral.sh/uv/install.sh | sh
+      exec zsh
+"
+fi
+ok "shell arch=arm64"
+
+UV_ARCH=$(file "$(which uv 2>/dev/null)" 2>/dev/null | grep -oE 'arm64|x86_64' | head -1)
+if [ -n "$UV_ARCH" ] && [ "$UV_ARCH" != "arm64" ]; then
+    warn "uv-бинарник $UV_ARCH (через Rosetta). По умолчанию ставит x86_64 Python.
+       Этот скрипт явно запросит arm64-сборку через ``cpython-X.Y-macos-aarch64``
+       — обычно работает. Если упрётся — переустановите uv как arm64 (см. README)."
+elif [ -n "$UV_ARCH" ]; then
+    ok "uv arch=$UV_ARCH"
+fi
+
 # ── 1. Найти arm64 Python из ~/.local/share/uv (НЕ из /usr/local) ────────────
 info "Поиск arm64 Python (uv-managed, не Homebrew)..."
 
