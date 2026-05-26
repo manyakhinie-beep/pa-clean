@@ -61,7 +61,9 @@ cd pa-clean
 
 # 2. Полная сборка: deps + WebUI + создать .env
 cp .env.example .env
-uv sync
+uv sync                                          # включает dev: ruff, mypy, pytest-cov
+# или для прод-сборки без dev-инструментов (без coverage, ruff, mypy, pytest):
+# uv sync --no-dev
 (cd webui && npm install && npm run build)
 
 # 3. Настроить .env (обязательно: vault-путь и MLX-модель)
