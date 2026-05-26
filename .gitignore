@@ -98,9 +98,15 @@ data/config.json
 # ── Personal vault (private data) ─────────────────────────────────────────────
 # The vault lives outside the repo (PA_VAULT_PATH), but guard against
 # accidental commits if someone points PA_VAULT_PATH into the project dir.
+# IMPORTANT: bare ``vault/`` matches ANY directory called vault anywhere in
+# the tree — including ``src/personal_assistant/vault/`` (our writer module)
+# and would silently exclude it from ``git push``. Use leading slash to
+# anchor at the repo root, plus an explicit never-ignore for the package.
 PersonalAssistantVault/
-vault/
+/vault/
 *.md.vault
+!src/personal_assistant/vault/
+!src/personal_assistant/vault/**
 
 # ── MLX / AI models (large binary files) ─────────────────────────────────────
 models/
