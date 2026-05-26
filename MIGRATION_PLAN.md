@@ -40,6 +40,14 @@ git branch -m main
 mkdir -p src/personal_assistant tests/{unit,e2e,scenarios} webui docs .github/workflows
 ```
 
+### Внимание: копируем не только `*.py`
+
+Подкаталоги пакета могут содержать ассеты, без которых код не работает:
+`src/personal_assistant/templates/*.j2` (Jinja-шаблоны vault writer), любые
+`*.json`, `*.yaml`, `*.md`, `*.html` рядом с кодом. На каждом этапе сверяйте
+`find src/personal_assistant/<dir> -maxdepth 1 -type f` между pa-merge и
+pa-clean.
+
 ### Что НЕ переносим (exclusion manifest)
 
 Никогда не копируем в чистый репозиторий:
@@ -80,8 +88,8 @@ git add -A && git commit -m "stage-0: build scaffolding (pyproject, uv.lock, git
 | Этап | Функционал | Модули (src) | Тесты | Гейт приёмки |
 |------|-----------|--------------|-------|--------------|
 | **1** | Конфиг + вкладка «Правила» | `__init__.py`, `config.py`, `models.py`, `report_schemas.py`, `webui/rules_settings.py` | `tests/conftest.py`, `test_config.py`, `test_rules_settings_api.py`, `test_report_schemas.py` | все 8 настроек сохраняются/валидируются/читаются; ruff+mypy; `-m unit` зелёный |
-| **2** | Core pa-merge (без ИИ) | `vault/`, `personal_vault/`, `sync/`, `utils/`, `templates/`, `reports/` | соответств. `tests/unit/**` | базовый мердж/обработка стабильны; ruff+mypy; `-m unit` + `-m e2e` (базовые) |
-| **3** | MLX-интеграция | `mlx_server/` (engine, server, chat_routes, vault_index, scheduler, tasks), `services/{llm_classify,summarize,daily_brief,meeting_prep}_service.py` | unit на MLX-обёртку + `scenarios/test_mlx_scenarios.py`, `test_search_scenarios.py` | модель грузится, инференс работает, настройки применяются; `-m "scenario and live and mlx"` на Mac |
+| **2** | Core pa-merge (без ИИ) | `vault/` (+ Jinja `templates/*.j2` — **не только `*.py`**), `personal_vault/`, `sync/`, `utils/`, `templates/`, `reports/` | `tests/unit/{vault,sync,utils}/**` + `test_reports_store.py`; **deselect** `test_timezone.py::test_parse_relative_to_msk_garbage_returns_error` (re-enable в этапе 3) | ruff+mypy; `-m unit` зелёный с deselect-ом; e2e отложен до этапа 6 (нужен полный server) |
+| **3** | MLX-интеграция | `mlx_server/` (engine, server, chat_routes, vault_index, scheduler, tasks, **tools** — `date_calc`/`router`/`validator`/`executor`), `services/{llm_classify,summarize,daily_brief,meeting_prep}_service.py` | `tests/unit/mlx/**`, `test_engine_sampling.py`, **re-enable** `test_timezone.py::test_parse_relative_to_msk_garbage_returns_error` + `scenarios/test_mlx_scenarios.py`, `test_search_scenarios.py` | модель грузится, инференс работает, настройки применяются; `-m "scenario and live and mlx"` на Mac |
 | **4** | Mail-интеграция | `readers/applescript_base.py`, `readers/mail_reader.py`, `services/mail_service.py`, `inbox/`, draft-эндпоинты `mlx_server/chat_routes.py` | mail-unit + `scenarios/test_draft_scenarios.py` (моки), `test_draft_flow_applescript.py` (live), `test_mail_body_scenarios.py` | чтение писем, декод, черновики; `-m "scenario and mail"` (mocked) зелёный, live — на Mac с правами |
 | **5** | Calendar-интеграция | `calendar/` (intent_parser, calendar_writer, routes), `readers/calendar_reader.py`, `services/calendar_service.py`, `today/` | calendar-unit + `test_settings_wiring.py` (сквозной: config+calendar+mail), `scenarios/test_calendar_scenarios.py` (моки), `test_applescript_scenarios.py` (live) | чтение событий, слоты, создание; `-m "scenario and calendar"` (mocked) зелёный |
 | **6** | WebUI полный цикл | `webui/` (frontend js/scss, `index.html`, `scripts/`, `package.json`), `webui/routes.py`, `profile/` | `tests/e2e/**` | `npm run build` ок; пользовательский сценарий вход→результат; `-m e2e` зелёный |
@@ -119,6 +127,26 @@ git add -A && git commit -m "stage-N: <функционал>"
 - [ ] `ruff` и `mypy` чистые; CI (`ci.yml`) зелёный.
 - [ ] Документация полная и актуальная; нет критических security-issue.
 - [ ] Зафиксирован performance baseline (время инференса MLX, время мерджа).
+
+## Отклонение от плана: этапы 3+4+5 объединены
+
+`mlx_server/server.py` — это hub, который на module-level импортирует роутеры
+из `calendar/`, `inbox/`, `profile/`, `today/`, `webui/routes.py`, плюс
+`readers/{calendar,mail}_reader`. Без них модуль не импортируется. А
+`test_mlx_scenarios.py` импортирует `calendar.intent_parser` на верхнем
+уровне, `test_search_scenarios.py` — сам `mlx_server.server`. Поэтому строгий
+Stage 3 в изоляции не даёт запустить ни один live-сценарий MLX.
+
+Решение: **объединили этапы 3+4+5 в один пуш** (MLX + Mail + Calendar + readers
++ services + остальные UI route-пакеты). `server.py` лёг сюда же — все его
+зависимости в этом пуше уже есть. После этого:
+
+- backend полностью функционален; `TestClient(app)` работает;
+- live-маркеры обслуживают весь scenario-suite;
+- **Stage 6** сокращается до **webui/frontend (npm build) + docs + CI**.
+
+`tools/registry.json` и `scripts/generate_test_vault.py` — внешние ассеты,
+которые тесты тянут из корня репозитория; включены в этот пуш.
 
 ## Заметки по решениям
 

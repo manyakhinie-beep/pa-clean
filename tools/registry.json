@@ -1,0 +1,19 @@
+{
+  "tools": [
+    {
+      "id": "date_calc",
+      "enabled": true,
+      "description": "Converts dates to absolute YYYY-MM-DD format. Supports Russian and English relative expressions: 'сегодня'/'today', 'завтра'/'tomorrow', 'послезавтра'/'day after tomorrow', 'вчера'/'yesterday', 'через N дней', weekday names, week/month/year offsets, ISO 8601, and Russian DD.MM.YYYY formats.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "Relative or absolute date expression, e.g. 'tomorrow', 'через 3 дня', 'следующий понедельник', '2026-06-01'"
+          }
+        },
+        "required": ["expression"]
+      }
+    }
+  ]
+}
