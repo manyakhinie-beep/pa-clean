@@ -610,34 +610,28 @@ def _resolve_reply_message_id(vault_item_id: str) -> Optional[str]:
 
     Returns the ``message_id`` frontmatter value (Mail.app internal integer ID)
     or ``None`` if no match is found.
-    """
-    import yaml
 
+    Uses the lenient frontmatter parser so legacy vault entries with run-on
+    YAML still resolve — without this, the draft silently fell through to
+    "new outgoing message" instead of threading into the existing reply.
+    """
     from personal_assistant.config import settings
+    from personal_assistant.utils.frontmatter import parse_lenient
 
     mail_root = settings.vault_path / "mail"
     if not mail_root.exists():
         return None
 
-    def _parse_fm(text: str) -> dict:
-        if not text.startswith("---"):
-            return {}
-        end = text.find("\n---", 3)
-        if end == -1:
-            return {}
-        try:
-            return yaml.safe_load(text[3:end].strip()) or {}
-        except Exception:
-            return {}
-
+    needle = vault_item_id.strip()
     for md_file in mail_root.rglob("*.md"):
         try:
             text = md_file.read_text(encoding="utf-8")
-            fm = _parse_fm(text)
+            fm = parse_lenient(text)
             file_stem = md_file.stem
             doc_id = str(fm.get("id") or file_stem).strip()
-            if doc_id == vault_item_id.strip():
-                return str(fm.get("message_id") or "").strip() or None
+            if doc_id == needle:
+                mid = str(fm.get("message_id") or "").strip()
+                return mid or None
         except Exception:
             continue
     return None

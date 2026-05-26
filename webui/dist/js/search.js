@@ -284,18 +284,22 @@ export function initSearch(ctx) {
       });
 
       // Tool action buttons
+      //
+      // Critical: each tool must carry the doc's id/thread_id/path through to
+      // chat so reply_to_message_id and vault context are correctly wired.
+      // The previous implementation only passed `path` + an empty `/draft `
+      // slash-stub, which left the chat with NULL reply context — so the
+      // draft button created a NEW email instead of threading into the
+      // existing message, and summarize had no document to summarize.
       const actionsEl = el.querySelector('.search__result-actions');
       const tools = SEARCH_TOOLS[section] || SEARCH_TOOLS.default;
       tools.forEach(tool => {
         const btn = document.createElement('button');
         btn.className = 'btn btn--sm btn--secondary';
         btn.textContent = tool.label;
-        btn.addEventListener('click', e => {
+        btn.addEventListener('click', async e => {
           e.stopPropagation();
-          activateTab('chat');
-          document.dispatchEvent(new CustomEvent('pa:chat-open', {
-            detail: { path: item.path, title, mode: tool.mode, message: tool.message },
-          }));
+          await _runTool(tool, item, title, btn);
         });
         actionsEl.appendChild(btn);
       });
@@ -308,6 +312,98 @@ export function initSearch(ctx) {
 
       resultsEl.appendChild(el);
     });
+  }
+
+  // ── Tool dispatcher ───────────────────────────────────────────────────────
+  //
+  // Builds the right chat payload for a search-result action.  Mirrors what
+  // inbox.js does so the chat receives reply_to_message_id, vault_thread_id
+  // and a meaningful prompt string, not a bare "/draft ".
+  async function _runTool(tool, item, title, btn) {
+    const section = item.section || 'default';
+    const replyId = item.id || null;     // file stem / id frontmatter — backend resolves
+    const threadId = item.thread_id || null;
+
+    // ── Mail draft → reply to existing thread with full context ────────────
+    if (tool.mode === 'draft' && section === 'mail' && replyId) {
+      const origLabel = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = '⏳';
+      try {
+        const ctx = await api.inboxDraftContext(replyId);
+        const message =
+          ctx.context_prompt ||
+          `Составь черновик ответа на письмо от ${item.sender_name || '—'}: «${item.subject || title}»`;
+        activateTab('chat');
+        document.dispatchEvent(new CustomEvent('pa:chat-open', {
+          detail: {
+            path: item.path || null,
+            title,
+            mode: 'draft',
+            message,
+            vault_thread_id: threadId,
+            reply_message_id: replyId,
+            thread_context: ctx,
+          },
+        }));
+      } catch (err) {
+        // Fallback: open chat with reply context but no LLM prep
+        activateTab('chat');
+        document.dispatchEvent(new CustomEvent('pa:chat-open', {
+          detail: {
+            path: item.path || null,
+            title,
+            mode: 'draft',
+            message: `Составь черновик ответа на письмо: «${item.subject || title}»`,
+            vault_thread_id: threadId,
+            reply_message_id: replyId,
+          },
+        }));
+        showToast('Контекст треда недоступен — открыт чат без подготовки', 'warning');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = origLabel;
+      }
+      return;
+    }
+
+    // ── Summarize → fire pa:chat-send so the prompt runs immediately ───────
+    if (tool.mode === 'summarize') {
+      const subj = item.subject || title;
+      const message =
+        section === 'mail'
+          ? `Суммаризируй тред писем по теме «${subj}»`
+          : section === 'calendar'
+            ? `Суммаризируй встречу «${subj}» и подскажи ключевые моменты`
+            : `Суммаризируй документ «${subj}»`;
+      activateTab('chat');
+      document.dispatchEvent(new CustomEvent('pa:chat-send', {
+        detail: {
+          message,
+          mode: 'chat',
+          vault_thread_id: threadId,
+          reply_message_id: replyId,
+          path: item.path || null,
+        },
+      }));
+      return;
+    }
+
+    // ── Generic chat / discuss ─────────────────────────────────────────────
+    const message = tool.message && tool.message.trim()
+      ? tool.message
+      : `Расскажи подробнее о «${item.subject || title}»`;
+    activateTab('chat');
+    document.dispatchEvent(new CustomEvent('pa:chat-open', {
+      detail: {
+        path: item.path || null,
+        title,
+        mode: tool.mode || 'chat',
+        message,
+        vault_thread_id: threadId,
+        reply_message_id: replyId,
+      },
+    }));
   }
 
   // ── Focus & lazy-load tags on tab activate ────────────────────────────────

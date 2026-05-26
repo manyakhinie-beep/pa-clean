@@ -1187,9 +1187,9 @@ export function initChat(ctx) {
     textarea.focus();
   });
 
-  // ── pa:chat-send event (auto-send from Vault / Inbox) ───────────────────────
+  // ── pa:chat-send event (auto-send from Vault / Inbox / Search) ──────────────
   document.addEventListener('pa:chat-send', async (e) => {
-    const { message, mode, vault_thread_id, reply_message_id } = e.detail || {};
+    const { message, mode, vault_thread_id, reply_message_id, path } = e.detail || {};
     if (!message) return;
     activateTab('chat');
     // E-3 fix: always open a fresh thread so inbox auto-send actions (summarize,
@@ -1197,6 +1197,13 @@ export function initChat(ctx) {
     // createNewThread() resets contextPaths/currentVaultThreadId/currentReplyMessageId,
     // so set them AFTER the await.
     await createNewThread(false);
+    if (path && !contextPaths.includes(path)) {
+      // Attach the source document so the backend has real context for
+      // summarize/discuss actions dispatched from Search.
+      contextPaths.push(path);
+      renderContextChips();
+      renderRefs();
+    }
     currentVaultThreadId  = vault_thread_id  || null;
     currentReplyMessageId = reply_message_id || null;
     if (mode) setMode(mode);

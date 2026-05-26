@@ -292,21 +292,37 @@ async def search_docs(req: _SearchDocsRequest):
             deduped.append(d)
     pool = deduped[: req.top_k]
 
+    def _doc_to_dict(d) -> dict:
+        # Identity / threading fields — needed so that frontend actions
+        # ("draft reply", "summarize") can open the chat with the correct
+        # reply_message_id / vault_thread_id without a second round-trip.
+        fm = d.frontmatter or {}
+        doc_id = str(fm.get("id") or d.path.stem).strip()
+        thread_id = str(fm.get("thread_id") or "").strip() or None
+        message_id = str(fm.get("message_id") or "").strip() or None
+        subject = str(fm.get("subject") or d.title or d.path.stem).strip()
+        sender_name = str(fm.get("sender_name") or fm.get("sender") or "").strip() or None
+        sender_email = d.sender_email
+        return {
+            "id": doc_id,
+            "path": str(d.path),
+            "section": d.section or "",
+            "title": d.title or d.path.name,
+            "date": str(d.date)
+            if d.date
+            else str(fm.get("date") or fm.get("start") or ""),
+            "tags": d.tags or [],
+            "snippet": d.short_summary(200),
+            "attachments": d.attachments,
+            "thread_id": thread_id,
+            "message_id": message_id,
+            "subject": subject,
+            "sender_name": sender_name,
+            "sender_email": sender_email,
+        }
+
     return {
-        "docs": [
-            {
-                "path": str(d.path),
-                "section": d.section or "",
-                "title": d.title or d.path.name,
-                "date": str(d.date)
-                if d.date
-                else str(d.frontmatter.get("date") or d.frontmatter.get("start") or ""),
-                "tags": d.tags or [],
-                "snippet": d.short_summary(200),
-                "attachments": d.attachments,
-            }
-            for d in pool
-        ],
+        "docs": [_doc_to_dict(d) for d in pool],
         "total": len(pool),
         "mode": req.mode,
         "date_prefixes": date_prefixes,
