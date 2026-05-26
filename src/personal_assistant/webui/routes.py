@@ -968,10 +968,25 @@ async def get_tool_prompts_api():
     p = get_tool_prompts()
     prompts_file = str(Path(_cfg.vault_path) / _PROMPTS_FILENAME)
     return {
+        # Saved user overrides (empty string when no custom is set). This
+        # contract is consumed by older tests; keep it stable.
         "draft_system":               p.draft_system,
         "summarize_system":           p.summarize_system,
+        # Effective text shown in the textarea: user override if set, else
+        # the built-in default. The UI displays the actual content so the
+        # user can SEE and edit the default in place.
+        "effective_draft_system":     p.draft_system or DEFAULT_DRAFT_SYSTEM,
+        "effective_summarize_system": p.summarize_system or DEFAULT_SUMMARIZE_SYSTEM,
+        # Whether the effective text is the built-in default (badge in UI).
+        "draft_is_default":           not p.draft_system.strip(),
+        "summarize_is_default":       not p.summarize_system.strip(),
+        # Defaults exposed verbatim so the UI can compute "Reset to default"
+        # and detect "user edited content".
         "default_draft_system":       DEFAULT_DRAFT_SYSTEM,
         "default_summarize_system":   DEFAULT_SUMMARIZE_SYSTEM,
+        # File-path alias (frontend reads ``file_path``; keep
+        # ``prompts_file_path`` for backwards-compat).
+        "file_path":                  prompts_file,
         "prompts_file_path":          prompts_file,
         "max_prompt_len":             8_000,
     }

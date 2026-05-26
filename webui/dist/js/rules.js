@@ -595,33 +595,77 @@ function initToolsTab(ctx) {
   _lenSync(tpDraft, tpDraftLen);
   _lenSync(tpSummarize, tpSumLen);
 
+  // Cache defaults so save logic can collapse "default content" -> empty
+  // override (which falls back to default on next read).
+  let tpDefaultDraft = '';
+  let tpDefaultSum   = '';
+
+  function _updateHint(hintEl, textarea, defaultText) {
+    if (!hintEl || !textarea) return;
+    const isDefault = (textarea.value || '').trim() === (defaultText || '').trim();
+    hintEl.textContent = isDefault ? 'Дефолтный промпт' : 'Кастомный промпт';
+    hintEl.style.color = isDefault ? 'var(--text-secondary)' : 'var(--primary)';
+  }
+
   async function loadToolPrompts() {
     try {
       const data = await api.toolPromptsGet();
-      if (tpDraft)     { tpDraft.value = data.draft_system || ''; if (tpDraftLen) tpDraftLen.textContent = tpDraft.value.length; }
-      if (tpSummarize) { tpSummarize.value = data.summarize_system || ''; if (tpSumLen) tpSumLen.textContent = tpSummarize.value.length; }
-      if (tpDraftHint)  tpDraftHint.textContent  = data.draft_is_default    ? 'Дефолтный промпт' : 'Кастомный промпт';
-      if (tpSumHint)    tpSumHint.textContent    = data.summarize_is_default? 'Дефолтный промпт' : 'Кастомный промпт';
-      if (tpFilePath)   tpFilePath.textContent   = data.file_path || '—';
+      tpDefaultDraft = data.default_draft_system || '';
+      tpDefaultSum   = data.default_summarize_system || '';
+      if (tpDraft) {
+        // Show effective text (user override OR default). ``effective_*`` is
+        // the dedicated UI field; fall back to ``*_system || default`` for
+        // older backends.
+        tpDraft.value = data.effective_draft_system || data.draft_system || tpDefaultDraft;
+        if (tpDraftLen) tpDraftLen.textContent = tpDraft.value.length;
+      }
+      if (tpSummarize) {
+        tpSummarize.value = data.effective_summarize_system || data.summarize_system || tpDefaultSum;
+        if (tpSumLen) tpSumLen.textContent = tpSummarize.value.length;
+      }
+      _updateHint(tpDraftHint, tpDraft, tpDefaultDraft);
+      _updateHint(tpSumHint,   tpSummarize, tpDefaultSum);
+      if (tpFilePath) tpFilePath.textContent = data.file_path || data.prompts_file_path || '—';
     } catch {}
   }
 
+  // Live-update hint as user types so the badge flips от "Дефолтный" к
+  // "Кастомный" в момент любого изменения относительно дефолта.
+  tpDraft?.addEventListener('input',     () => _updateHint(tpDraftHint, tpDraft, tpDefaultDraft));
+  tpSummarize?.addEventListener('input', () => _updateHint(tpSumHint,   tpSummarize, tpDefaultSum));
+
   tpSaveBtn?.addEventListener('click', async () => {
     try {
-      await api.toolPromptsSave({ draft_system: (tpDraft?.value||'').trim(), summarize_system: (tpSummarize?.value||'').trim() });
+      // If the textarea content equals the default verbatim, save empty
+      // string — that way effective behaviour stays "use default" and the
+      // tool_prompts.json doesn't pin a frozen copy that would drift from
+      // future default updates.
+      const draftBody = (tpDraft?.value || '').trim();
+      const sumBody   = (tpSummarize?.value || '').trim();
+      await api.toolPromptsSave({
+        draft_system:     draftBody === tpDefaultDraft.trim() ? '' : draftBody,
+        summarize_system: sumBody   === tpDefaultSum.trim()   ? '' : sumBody,
+      });
       if (tpStatus) { tpStatus.textContent = 'Сохранено ✓'; setTimeout(() => { tpStatus.textContent = ''; }, 2000); }
       showToast('Промпты сохранены', 'success');
+      await loadToolPrompts();  // refresh hints after save
     } catch (err) { showToast('Ошибка: ' + err.message, 'error'); }
   });
 
   tpDraftReset?.addEventListener('click', async () => {
-    try { await api.toolPromptsSave({ draft_system: '', summarize_system: (tpSummarize?.value||'').trim() }); await loadToolPrompts(); showToast('Промпт черновика сброшен', 'success'); }
-    catch (err) { showToast('Ошибка: ' + err.message, 'error'); }
+    try {
+      await api.toolPromptsSave({ draft_system: '', summarize_system: (tpSummarize?.value||'').trim() });
+      await loadToolPrompts();
+      showToast('Промпт черновика сброшен к дефолту', 'success');
+    } catch (err) { showToast('Ошибка: ' + err.message, 'error'); }
   });
 
   tpSumReset?.addEventListener('click', async () => {
-    try { await api.toolPromptsSave({ draft_system: (tpDraft?.value||'').trim(), summarize_system: '' }); await loadToolPrompts(); showToast('Промпт суммаризации сброшен', 'success'); }
-    catch (err) { showToast('Ошибка: ' + err.message, 'error'); }
+    try {
+      await api.toolPromptsSave({ draft_system: (tpDraft?.value||'').trim(), summarize_system: '' });
+      await loadToolPrompts();
+      showToast('Промпт суммаризации сброшен к дефолту', 'success');
+    } catch (err) { showToast('Ошибка: ' + err.message, 'error'); }
   });
 
   // ── Tools registry ──────────────────────────────────────────────────────

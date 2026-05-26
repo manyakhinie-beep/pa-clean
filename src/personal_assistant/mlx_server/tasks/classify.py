@@ -269,83 +269,68 @@ def detect_has_action_for_user(text: str, user_email: Optional[str]) -> bool:
 # ---------------------------------------------------------------------------
 
 DEFAULT_CONFIG: dict = {
+    # Метки на русском, ключевые слова для matching — двуязычные (письма приходят
+    # на обоих языках). Редактируется через Rules → Инструменты → classify.yaml.
     "classifiers": {
         "urgency": {
-            "urgent": {
+            "срочно": {
                 "keywords": [
-                    "asap",
-                    "urgent",
-                    "deadline",
-                    "срочно",
-                    "немедленно",
-                    "as soon as possible",
-                    "by end of day",
-                    "eod",
-                    "today",
+                    "asap", "urgent", "deadline", "срочно", "немедленно",
+                    "as soon as possible", "by end of day", "eod", "today",
+                    "сегодня", "до конца дня",
                 ],
             },
-            "important": {
+            "важно": {
                 "keywords": [
-                    "important",
-                    "priority",
-                    "важно",
-                    "critical",
-                    "key",
-                    "must",
-                    "required",
-                    "необходимо",
+                    "important", "priority", "важно", "critical", "key",
+                    "must", "required", "необходимо", "приоритет",
                 ],
             },
         },
         "category": {
-            "finance": {
+            "финансы": {
                 "keywords": [
-                    "invoice",
-                    "payment",
-                    "budget",
-                    "счет",
-                    "оплата",
-                    "billing",
-                    "receipts",
-                    "expense",
-                    "cost",
+                    "invoice", "payment", "budget", "счёт", "счет", "оплата",
+                    "billing", "receipts", "expense", "cost",
+                    "бюджет", "расходы", "счёт-фактура",
                 ],
             },
-            "meeting": {
+            "встреча": {
                 "keywords": [
-                    "meeting",
-                    "call",
-                    "zoom",
-                    "teams",
-                    "встреча",
-                    "agenda",
-                    "calendar invite",
-                    "conference",
+                    "meeting", "call", "zoom", "teams", "встреча", "agenda",
+                    "calendar invite", "conference", "созвон", "повестка",
+                    "приглашение", "конференция",
                 ],
             },
-            "legal": {
+            "договор": {
                 "keywords": [
-                    "contract",
-                    "agreement",
-                    "nda",
-                    "договор",
-                    "подписать",
-                    "legal",
-                    "terms",
-                    "conditions",
+                    "contract", "agreement", "nda", "договор", "подписать",
+                    "legal", "terms", "conditions", "соглашение", "юридич",
                 ],
             },
-            "action-required": {
+            "требует-действия": {
                 "keywords": [
-                    "please",
-                    "could you",
-                    "can you",
-                    "need you",
-                    "пожалуйста",
-                    "action required",
-                    "follow up",
-                    "respond",
-                    "reply",
+                    "please", "could you", "can you", "need you", "пожалуйста",
+                    "action required", "follow up", "respond", "reply",
+                    "ответить", "согласовать", "выполнить",
+                ],
+            },
+            "поездка": {
+                "keywords": [
+                    "trip", "travel", "flight", "hotel", "booking",
+                    "командировка", "поездка", "билет", "перелёт", "бронь",
+                ],
+            },
+            "проект": {
+                "keywords": [
+                    "project", "milestone", "deliverable", "roadmap", "sprint",
+                    "проект", "этап", "релиз", "майлстоун",
+                ],
+            },
+            "личное": {
+                "keywords": [
+                    "personal", "family", "лично", "семья", "ребёнок", "дети",
+                    "родители", "personal note",
                 ],
             },
         },
@@ -354,12 +339,17 @@ DEFAULT_CONFIG: dict = {
         "enabled": False,
         "threshold": 0.4,
         "batch_size": 5,
+        # Категории для LLM-классификации — синхронизированы с category.keys() выше
+        # плюс несколько общих. Все на русском, чтобы фронтенд и vault frontmatter
+        # были однородны.
         "categories": [
-            "urgent", "important", "meeting", "finance",
-            "legal", "travel", "hr", "project", "it", "info",
+            "срочно", "важно", "встреча", "финансы",
+            "договор", "поездка", "проект", "личное",
+            "требует-действия", "информация",
         ],
         "prompt": (
-            "Классифицируй письмо. Ответь ТОЛЬКО одним словом из списка:\n"
+            "Классифицируй письмо. Ответь ТОЛЬКО одним словом из списка "
+            "(на русском):\n"
             "{categories}\n\nТема: {subject}\nПисьмо: {preview}\n\nКатегория:"
         ),
     },
