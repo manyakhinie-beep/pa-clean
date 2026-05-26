@@ -1,0 +1,55 @@
+---
+message_id: "{{ msg.message_id | replace('"', '\\"') }}"
+thread_id: "{{ msg.thread_id or '' }}"
+title: "{{ msg.subject | replace('"', '\\"') }}"
+type: mail-message
+source: "{{ msg.source or 'mail' }}"
+sender: "[[contacts/{{ msg.sender_email }}]]"
+sender_name: "{{ (msg.sender_name or '') | replace('"', '\\"') }}"
+from: "{{ msg.sender_email }}"
+date: {{ msg.date.strftime('%Y-%m-%dT%H:%M:%S%z') }}
+mailbox: "{{ msg.mailbox or '' }}"
+has_attachments: {{ msg.has_attachments | lower }}
+{% if msg.recipients %}
+recipients:
+{% for addr in msg.recipients %}  - "{{ addr | replace('"', '\\"') }}"
+{% endfor %}{% endif %}
+{% if msg.cc %}
+cc:
+{% for addr in msg.cc %}  - "{{ addr | replace('"', '\\"') }}"
+{% endfor %}{% endif %}
+{% if msg.attachments %}
+attachments:
+{% for name in msg.attachments %}  - "{{ name | replace('"', '\\"') }}"
+{% endfor %}{% endif %}
+tags: [почта]
+created: {{ now }}
+---
+
+# {{ msg.subject }}
+
+| Поле | Значение |
+|------|----------|
+| 📨 От | {% if msg.sender_name %}{{ msg.sender_name }} <{{ msg.sender_email }}>{% else %}{{ msg.sender_email }}{% endif %} |
+| 📅 Дата | {{ msg.date.strftime('%d.%m.%Y %H:%M') }} |
+| 📁 Ящик | {{ msg.mailbox or "—" }} |
+{% if msg.recipients %}| 📬 Кому | {{ msg.recipients | join(", ") }} |
+{% endif %}{% if msg.cc %}| 👥 Копия | {{ msg.cc | join(", ") }} |
+{% endif %}
+{% if msg.attachments %}
+## Вложения
+
+{% for name in msg.attachments %}
+- 📎 {{ name }}
+{% endfor %}
+{% elif msg.has_attachments %}
+## Вложения
+
+_Имена вложений недоступны — включите PA\_MAIL\_FETCH\_BODY=true для их получения._
+{% endif %}
+
+{% if msg.body %}
+## Текст письма
+
+{{ msg.body }}
+{% endif %}

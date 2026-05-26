@@ -1,0 +1,57 @@
+---
+email: {{ contact.email }}
+title: "{{ ((contact.full_name or contact.name) or contact.email) | replace('"', '\\"') }}"
+type: contact
+{% if contact.full_name %}
+full_name: "{{ contact.full_name }}"
+{% endif %}
+{% if contact.name %}
+name: "{{ contact.name }}"
+{% endif %}
+{% if contact.name_source %}
+name_source: {{ contact.name_source }}
+{% endif %}
+{% if contact.name_updated_at %}
+name_updated_at: {{ contact.name_updated_at }}
+{% endif %}
+{% if contact.organization %}
+organization: "{{ contact.organization }}"
+{% endif %}
+{% if contact.phone %}
+phone: "{{ contact.phone }}"
+{% endif %}
+sources:
+{% for s in contact.sources %}
+  - {{ s }}
+{% endfor %}
+tags: [контакт]
+created: {{ now }}
+updated: {{ now }}
+---
+
+# {{ contact.full_name or contact.name or contact.email }}
+
+| Поле | Значение |
+|------|----------|
+| 📧 Email | [{{ contact.email }}](mailto:{{ contact.email }}) |
+{% if contact.full_name %}
+| 👤 Полное имя | {{ contact.full_name }} |
+{% endif %}
+{% if contact.name and contact.name != contact.full_name %}
+| 🏷️ Отображаемое имя | {{ contact.name }} |
+{% endif %}
+{% if contact.organization %}
+| 🏢 Организация | {{ contact.organization }} |
+{% endif %}
+{% if contact.phone %}
+| 📞 Телефон | {{ contact.phone }} |
+{% endif %}
+| 🔗 Источники | {{ contact.sources | join(", ") }} |
+
+## Заметки
+
+{{ contact.notes or "_Заметок пока нет._" }}
+
+## Связанные документы
+
+_Письма и события календаря, связанные с этим контактом, появятся здесь после синхронизации._

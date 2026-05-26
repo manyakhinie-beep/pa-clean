@@ -1,0 +1,52 @@
+---
+uid: {{ event.uid }}
+title: "{{ event.title | replace('"', '\\"') }}"
+type: calendar-event
+calendar: {{ event.calendar_name or "Неизвестно" }}
+start: {{ event.start.strftime('%Y-%m-%dT%H:%M:%S%z') }}
+end: {{ event.end.strftime('%Y-%m-%dT%H:%M:%S%z') }}
+all_day: {{ event.all_day | lower }}
+{% if event.location %}location: "{{ event.location }}"{% endif %}
+{% if event.organizer %}organizer: "[[contacts/{{ event.organizer }}]]"{% endif %}
+{% if event.attendees %}
+attendees:
+{% for a in event.attendees %}  - "[[contacts/{{ a }}]]"
+{% endfor %}{% endif %}
+{% if event.attachments %}
+attachments:
+{% for name in event.attachments %}  - "{{ name | replace('"', '\\"') }}"
+{% endfor %}{% endif %}
+tags: [календарь]
+created: {{ now }}
+---
+
+# {{ event.title }}
+
+| Поле | Значение |
+|------|----------|
+| 📅 Начало | {{ event.start.strftime('%d.%m.%Y %H:%M') }} |
+| ⏰ Конец | {{ event.end.strftime('%d.%m.%Y %H:%M') }} |
+| 📆 Календарь | {{ event.calendar_name or "—" }} |
+{% if event.location %}| 📍 Место | {{ event.location }} |{% endif %}
+{% if event.organizer %}| 👤 Организатор | [[contacts/{{ event.organizer }}]] |{% endif %}
+{% if event.url %}| 🔗 Ссылка | {{ event.url }} |{% endif %}
+
+{% if event.attendees %}
+## Участники
+{% for a in event.attendees %}
+- [[contacts/{{ a }}]]
+{% endfor %}
+{% endif %}
+
+{% if event.attachments %}
+## Вложения
+{% for name in event.attachments %}
+- 📎 {{ name }}
+{% endfor %}
+{% endif %}
+
+{% if event.notes %}
+## Заметки
+
+{{ event.notes }}
+{% endif %}
