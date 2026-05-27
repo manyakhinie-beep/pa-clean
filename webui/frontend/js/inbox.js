@@ -723,6 +723,11 @@ function renderAssistant() {
           <span>Draft ответа</span>
           <kbd>R</kbd>
         </button>
+        <button class="ib-action" data-action="delegate" title="D">
+          <svg class="ib-action-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 014-4h.5M16 3.13a4 4 0 010 7.75M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+          <span>Делегировать</span>
+          <kbd>D</kbd>
+        </button>
         <button class="ib-action" data-action="summarize" title="U">
           <svg class="ib-action-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 10h16M4 14h8"/></svg>
           <span>Сводка треда</span>
@@ -1043,6 +1048,149 @@ async function _openDraftWithContext(item) {
 }
 
 // ---------------------------------------------------------------------------
+// Delegate workflow ("🤝 Делегировать")
+// ---------------------------------------------------------------------------
+//
+// Opens a modal with the colleague list from Rules → Инструменты, lets the
+// manager add a short note, then calls /delegate-suggest to get the
+// AI-generated intro.  Confirming hands the payload to
+// /api/chat/save-draft-mail so Mail.app opens a compose window addressed to
+// the colleague.
+//
+// Falls back to a "configure first" prompt when no colleagues are set.
+
+async function _openDelegatePicker(item) {
+  let contacts = [];
+  try {
+    const res = await api.inboxDelegateContacts();
+    contacts = res?.contacts || [];
+  } catch (err) {
+    _ctx?.showToast?.('Не удалось загрузить список сотрудников: ' + err.message, 'error');
+    return;
+  }
+
+  if (!contacts.length) {
+    _ctx?.showToast?.(
+      'Сначала добавьте сотрудников в Правила → Инструменты → Делегирование.',
+      'warning',
+    );
+    _ctx?.activateTab?.('rules');
+    return;
+  }
+
+  // Remove any existing picker
+  document.querySelector('.ib-delegate-modal')?.remove();
+
+  const modal = document.createElement('div');
+  modal.className = 'ib-delegate-modal';
+  modal.innerHTML = `
+    <div class="ib-delegate-modal__backdrop"></div>
+    <div class="ib-delegate-modal__panel" role="dialog" aria-modal="true" aria-label="Делегировать письмо">
+      <div class="ib-delegate-modal__header">
+        <h3>🤝 Делегировать письмо</h3>
+        <button class="ib-delegate-modal__close" aria-label="Закрыть">×</button>
+      </div>
+      <div class="ib-delegate-modal__body">
+        <p class="ib-delegate-modal__hint">Кому переслать «${_esc(item.subject || 'без темы')}»?</p>
+        <div class="ib-delegate-modal__contacts">
+          ${contacts.map((c, idx) => `
+            <label class="ib-delegate-contact">
+              <input type="radio" name="ib-delegate-target" value="${_esc(c.email)}"
+                     ${idx === 0 ? 'checked' : ''}>
+              <div class="ib-delegate-contact__body">
+                <div class="ib-delegate-contact__name">${_esc(c.name || c.email)}</div>
+                <div class="ib-delegate-contact__meta">
+                  ${_esc(c.email)}${c.role ? ' · ' + _esc(c.role) : ''}
+                </div>
+                ${c.note ? `<div class="ib-delegate-contact__note">${_esc(c.note)}</div>` : ''}
+              </div>
+            </label>`).join('')}
+        </div>
+        <label class="ib-delegate-modal__note">
+          <span>Заметка для коллеги (необязательно)</span>
+          <textarea id="ib-delegate-note" rows="2"
+                    placeholder="Напр.: «Прошу ускорить, ждут к среде»"></textarea>
+        </label>
+        <div class="ib-delegate-modal__preview" id="ib-delegate-preview" style="display:none">
+          <div class="ib-delegate-modal__preview-label">Предпросмотр</div>
+          <div class="ib-delegate-modal__preview-subject" id="ib-delegate-preview-subject"></div>
+          <div class="ib-delegate-modal__preview-intro" id="ib-delegate-preview-intro"></div>
+          <div class="ib-delegate-modal__preview-flag" id="ib-delegate-preview-flag"></div>
+        </div>
+      </div>
+      <div class="ib-delegate-modal__footer">
+        <button class="btn btn--secondary" id="ib-delegate-cancel">Отмена</button>
+        <button class="btn btn--secondary" id="ib-delegate-preview-btn">👁 Предпросмотр</button>
+        <button class="btn btn--primary"   id="ib-delegate-send">✉️ Открыть в Mail</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+
+  const close = () => modal.remove();
+  modal.querySelector('.ib-delegate-modal__backdrop')?.addEventListener('click', close);
+  modal.querySelector('.ib-delegate-modal__close')?.addEventListener('click', close);
+  modal.querySelector('#ib-delegate-cancel')?.addEventListener('click', close);
+
+  const _selectedEmail = () =>
+    modal.querySelector('input[name="ib-delegate-target"]:checked')?.value || contacts[0].email;
+  const _note = () => modal.querySelector('#ib-delegate-note')?.value || '';
+
+  // Preview = call /delegate-suggest without opening Mail
+  async function _doPreview() {
+    const btn = modal.querySelector('#ib-delegate-preview-btn');
+    btn.disabled = true; btn.textContent = '⏳';
+    try {
+      const res = await api.inboxDelegateSuggest(item.id, _selectedEmail(), _note());
+      modal.querySelector('#ib-delegate-preview').style.display = '';
+      modal.querySelector('#ib-delegate-preview-subject').textContent = res.subject;
+      modal.querySelector('#ib-delegate-preview-intro').textContent = res.intro;
+      modal.querySelector('#ib-delegate-preview-flag').textContent =
+        res.mlx_used ? '🤖 Сгенерировано MLX' : '⚙️ Шаблон без MLX (модель недоступна)';
+      return res;
+    } catch (err) {
+      _ctx?.showToast?.('Ошибка генерации: ' + err.message, 'error');
+      return null;
+    } finally {
+      btn.disabled = false; btn.textContent = '👁 Предпросмотр';
+    }
+  }
+
+  modal.querySelector('#ib-delegate-preview-btn')?.addEventListener('click', _doPreview);
+
+  // Send = generate (if not yet) + POST /api/chat/save-draft-mail
+  modal.querySelector('#ib-delegate-send')?.addEventListener('click', async () => {
+    const sendBtn = modal.querySelector('#ib-delegate-send');
+    sendBtn.disabled = true; sendBtn.textContent = '⏳';
+    try {
+      const res = await api.inboxDelegateSuggest(item.id, _selectedEmail(), _note());
+      // Forward the pre-built draft payload to the existing save-draft-mail
+      // endpoint — this opens Mail.app's compose window with To, subject,
+      // and body all pre-filled.
+      const mailRes = await fetch('/api/chat/save-draft-mail', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(res.draft_payload),
+      });
+      if (!mailRes.ok) {
+        const err = await mailRes.json().catch(() => ({ detail: mailRes.statusText }));
+        throw new Error(err.detail || mailRes.statusText);
+      }
+      const out = await mailRes.json();
+      _ctx?.showToast?.(out.message || 'Черновик открыт в Mail', 'success');
+      close();
+    } catch (err) {
+      _ctx?.showToast?.('Ошибка: ' + err.message, 'error');
+      sendBtn.disabled = false; sendBtn.textContent = '✉️ Открыть в Mail';
+    }
+  });
+
+  // ESC closes
+  modal.addEventListener('keydown', e => {
+    if (e.key === 'Escape') close();
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Actions
 // ---------------------------------------------------------------------------
 function handleAction(action) {
@@ -1066,6 +1214,10 @@ function handleAction(action) {
         },
       }));
       _ctx?.activateTab?.('chat');
+      break;
+
+    case 'delegate':
+      _openDelegatePicker(item);
       break;
 
     case 'create-meeting':
@@ -1393,6 +1545,10 @@ function handleKey(e) {
     case 'R':
       e.preventDefault();
       handleAction('draft');
+      break;
+    case 'D':
+      e.preventDefault();
+      handleAction('delegate');
       break;
     case 'U':
       e.preventDefault();

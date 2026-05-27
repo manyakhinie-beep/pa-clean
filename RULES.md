@@ -78,6 +78,62 @@ def test_rules_tab_saves_mlx_settings(client):
 Отдельной config-настройки `mail_summary_prompt` нет — чтобы не плодить два
 конкурирующих хранилища.
 
+## Промпт делегирования и список сотрудников
+
+Действие **Inbox → Ассистент → 🤝 Делегировать** (клавиша `D`) формирует
+короткую вводную для пересылки письма коллеге. Промпт и список коллег
+редактируются в **Правила → Инструменты**:
+
+- `delegate_system` (textarea) — системный промпт. По умолчанию формирует
+  4-7-строчное вводное письмо в деловом тоне. Может быть переписан под
+  стиль команды. Та же валидация prompt-injection, лимит 8000 символов.
+- `delegate_contacts` (таблица: ФИО / Email / Роль / Заметка) — список
+  сотрудников, появляющийся в модалке делегирования. Email обязателен,
+  остальные поля — для UI-подсказок. Дубликаты по email (case-insensitive)
+  отбрасываются на сохранении.
+
+Хранится в `vault/.tool_prompts.json`:
+
+```json
+{
+  "draft_system":     "",
+  "summarize_system": "",
+  "delegate_system":  "",
+  "delegate_contacts": [
+    {"name": "Анна Сидорова", "email": "anna@corp.ru", "role": "HR",    "note": ""},
+    {"name": "Иван Петров",   "email": "ivan@corp.ru", "role": "юрист", "note": "договоры"}
+  ]
+}
+```
+
+**API:**
+
+- `GET  /tool-prompts` — возвращает `delegate_system`,
+  `delegate_contacts`, плюс `effective_delegate_system` (override либо
+  дефолт) и `default_delegate_system` для кнопки «Восстановить».
+- `POST /tool-prompts` принимает все четыре поля. Валидирует промпты,
+  фильтрует контакты без email, дедуплицирует по email.
+- `GET  /api/v1/inbox/delegate-contacts` — лёгкий endpoint только для
+  picker'а в Inbox (без промптов).
+- `POST /api/v1/inbox/{item_id}/delegate-suggest` с
+  `{target_email, note}` → возвращает `{intro, subject, contact,
+  mlx_used, draft_payload}`. Frontend сразу POST'ит `draft_payload` в
+  `/api/chat/save-draft-mail`, и Mail.app открывает compose-окно.
+
+**UX-flow:**
+
+1. Открыть письмо в Inbox → правая панель «Ассистент» → кнопка
+   **🤝 Делегировать** (или клавиша `D`).
+2. Появляется модалка со списком коллег (radio) и полем «Заметка для
+   коллеги» — опционально («ускорь, ждут к среде»).
+3. **«👁 Предпросмотр»** — показывает текст вводной без открытия Mail.
+4. **«✉️ Открыть в Mail»** — открывает Mail.app compose-окно с заполненными
+   To / Subject / Body. Пользователь нажимает Send в Mail.
+
+Если MLX-движок недоступен (Intel Mac, server-side error) — служба
+строит детерминированный шаблон без вызова модели. В ответе ставится
+`mlx_used: false`, в модалке отображается «⚙️ Шаблон без MLX».
+
 ## Валидация (сводно)
 
 - `float`/`int` — приведение типа + проверка `min`/`max` (включительно).

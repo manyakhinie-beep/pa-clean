@@ -588,12 +588,23 @@ function initToolsTab(ctx) {
   const tpSumHint      = document.getElementById('tp-summarize-hint');
   const tpFilePath     = document.getElementById('tp-file-path');
 
+  // Delegate prompt + contacts editor (Rules → Инструменты)
+  const tpDelegate     = document.getElementById('tp-delegate');
+  const tpDelegateReset= document.getElementById('tp-delegate-reset');
+  const tpDelegateLen  = document.getElementById('tp-delegate-len');
+  const tpDelegateHint = document.getElementById('tp-delegate-hint');
+  const dlgList        = document.getElementById('dlg-contacts-list');
+  const dlgAddBtn      = document.getElementById('dlg-contacts-add');
+  let _dlgContacts     = [];   // local working copy
+  let tpDefaultDelegate = '';
+
   function _lenSync(ta, lenEl) {
     if (!ta || !lenEl) return;
     ta.addEventListener('input', () => { lenEl.textContent = ta.value.length; });
   }
   _lenSync(tpDraft, tpDraftLen);
   _lenSync(tpSummarize, tpSumLen);
+  _lenSync(tpDelegate, tpDelegateLen);
 
   // Cache defaults so save logic can collapse "default content" -> empty
   // override (which falls back to default on next read).
@@ -607,11 +618,62 @@ function initToolsTab(ctx) {
     hintEl.style.color = isDefault ? 'var(--text-secondary)' : 'var(--primary)';
   }
 
+  // Render the editable contacts list.  Each row is a 4-input strip
+  // (name / email / role / note) plus a delete button.  Changes mutate the
+  // local ``_dlgContacts`` buffer; persistence happens on "Сохранить промпты".
+  function _renderDelegateContacts() {
+    if (!dlgList) return;
+    dlgList.innerHTML = '';
+    if (!_dlgContacts.length) {
+      dlgList.innerHTML =
+        '<div style="font-size:12px;color:var(--color-text-muted);padding:6px 0">' +
+        'Пока никого. Нажми «+ Добавить сотрудника».</div>';
+      return;
+    }
+    _dlgContacts.forEach((c, idx) => {
+      const row = document.createElement('div');
+      row.style.cssText =
+        'display:grid;grid-template-columns:1.2fr 1.4fr 1fr 1.4fr auto;' +
+        'gap:6px;align-items:center;padding:4px 0;';
+      row.innerHTML = `
+        <input class="settings__input" placeholder="ФИО"     value="${_esc(c.name  || '')}" data-f="name"  data-i="${idx}">
+        <input class="settings__input" placeholder="Email *" value="${_esc(c.email || '')}" data-f="email" data-i="${idx}" type="email">
+        <input class="settings__input" placeholder="Роль"    value="${_esc(c.role  || '')}" data-f="role"  data-i="${idx}">
+        <input class="settings__input" placeholder="Заметка" value="${_esc(c.note  || '')}" data-f="note"  data-i="${idx}">
+        <button class="btn btn--sm btn--secondary" data-rm="${idx}"
+                style="color:#ef4444;border-color:#ef4444;padding:4px 10px">✕</button>`;
+      row.querySelectorAll('input[data-f]').forEach(el => {
+        el.addEventListener('input', () => {
+          _dlgContacts[parseInt(el.dataset.i, 10)][el.dataset.f] = el.value;
+        });
+      });
+      row.querySelector('[data-rm]')?.addEventListener('click', () => {
+        _dlgContacts.splice(idx, 1);
+        _renderDelegateContacts();
+      });
+      dlgList.appendChild(row);
+    });
+  }
+
+  function _esc(s) {
+    return String(s || '')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  dlgAddBtn?.addEventListener('click', () => {
+    _dlgContacts.push({ name: '', email: '', role: '', note: '' });
+    _renderDelegateContacts();
+    // Focus the email cell of the new row so the user can start typing
+    const last = dlgList?.querySelector('div:last-child input[data-f="email"]');
+    last?.focus();
+  });
+
   async function loadToolPrompts() {
     try {
       const data = await api.toolPromptsGet();
       tpDefaultDraft = data.default_draft_system || '';
       tpDefaultSum   = data.default_summarize_system || '';
+      tpDefaultDelegate = data.default_delegate_system || '';
       if (tpDraft) {
         // Show effective text (user override OR default). ``effective_*`` is
         // the dedicated UI field; fall back to ``*_system || default`` for
@@ -623,8 +685,15 @@ function initToolsTab(ctx) {
         tpSummarize.value = data.effective_summarize_system || data.summarize_system || tpDefaultSum;
         if (tpSumLen) tpSumLen.textContent = tpSummarize.value.length;
       }
+      if (tpDelegate) {
+        tpDelegate.value = data.effective_delegate_system || data.delegate_system || tpDefaultDelegate;
+        if (tpDelegateLen) tpDelegateLen.textContent = tpDelegate.value.length;
+      }
+      _dlgContacts = Array.isArray(data.delegate_contacts) ? data.delegate_contacts.slice() : [];
+      _renderDelegateContacts();
       _updateHint(tpDraftHint, tpDraft, tpDefaultDraft);
       _updateHint(tpSumHint,   tpSummarize, tpDefaultSum);
+      _updateHint(tpDelegateHint, tpDelegate, tpDefaultDelegate);
       if (tpFilePath) tpFilePath.textContent = data.file_path || data.prompts_file_path || '—';
     } catch {}
   }
@@ -633,6 +702,7 @@ function initToolsTab(ctx) {
   // "Кастомный" в момент любого изменения относительно дефолта.
   tpDraft?.addEventListener('input',     () => _updateHint(tpDraftHint, tpDraft, tpDefaultDraft));
   tpSummarize?.addEventListener('input', () => _updateHint(tpSumHint,   tpSummarize, tpDefaultSum));
+  tpDelegate?.addEventListener('input',  () => _updateHint(tpDelegateHint, tpDelegate, tpDefaultDelegate));
 
   tpSaveBtn?.addEventListener('click', async () => {
     try {
@@ -640,11 +710,23 @@ function initToolsTab(ctx) {
       // string — that way effective behaviour stays "use default" and the
       // tool_prompts.json doesn't pin a frozen copy that would drift from
       // future default updates.
-      const draftBody = (tpDraft?.value || '').trim();
-      const sumBody   = (tpSummarize?.value || '').trim();
+      const draftBody    = (tpDraft?.value    || '').trim();
+      const sumBody      = (tpSummarize?.value|| '').trim();
+      const delegateBody = (tpDelegate?.value || '').trim();
+      // Filter contacts client-side to mirror server validation (need email).
+      const contacts = _dlgContacts
+        .map(c => ({
+          name:  (c.name  || '').trim(),
+          email: (c.email || '').trim(),
+          role:  (c.role  || '').trim(),
+          note:  (c.note  || '').trim(),
+        }))
+        .filter(c => c.email.includes('@'));
       await api.toolPromptsSave({
-        draft_system:     draftBody === tpDefaultDraft.trim() ? '' : draftBody,
-        summarize_system: sumBody   === tpDefaultSum.trim()   ? '' : sumBody,
+        draft_system:      draftBody    === tpDefaultDraft.trim()    ? '' : draftBody,
+        summarize_system:  sumBody      === tpDefaultSum.trim()      ? '' : sumBody,
+        delegate_system:   delegateBody === tpDefaultDelegate.trim() ? '' : delegateBody,
+        delegate_contacts: contacts,
       });
       if (tpStatus) { tpStatus.textContent = 'Сохранено ✓'; setTimeout(() => { tpStatus.textContent = ''; }, 2000); }
       showToast('Промпты сохранены', 'success');
@@ -654,7 +736,12 @@ function initToolsTab(ctx) {
 
   tpDraftReset?.addEventListener('click', async () => {
     try {
-      await api.toolPromptsSave({ draft_system: '', summarize_system: (tpSummarize?.value||'').trim() });
+      await api.toolPromptsSave({
+        draft_system: '',
+        summarize_system: (tpSummarize?.value||'').trim(),
+        delegate_system:  (tpDelegate?.value ||'').trim(),
+        delegate_contacts: _dlgContacts.filter(c => (c.email||'').includes('@')),
+      });
       await loadToolPrompts();
       showToast('Промпт черновика сброшен к дефолту', 'success');
     } catch (err) { showToast('Ошибка: ' + err.message, 'error'); }
@@ -662,9 +749,27 @@ function initToolsTab(ctx) {
 
   tpSumReset?.addEventListener('click', async () => {
     try {
-      await api.toolPromptsSave({ draft_system: (tpDraft?.value||'').trim(), summarize_system: '' });
+      await api.toolPromptsSave({
+        draft_system: (tpDraft?.value||'').trim(),
+        summarize_system: '',
+        delegate_system:  (tpDelegate?.value ||'').trim(),
+        delegate_contacts: _dlgContacts.filter(c => (c.email||'').includes('@')),
+      });
       await loadToolPrompts();
       showToast('Промпт суммаризации сброшен к дефолту', 'success');
+    } catch (err) { showToast('Ошибка: ' + err.message, 'error'); }
+  });
+
+  tpDelegateReset?.addEventListener('click', async () => {
+    try {
+      await api.toolPromptsSave({
+        draft_system:    (tpDraft?.value     ||'').trim(),
+        summarize_system:(tpSummarize?.value ||'').trim(),
+        delegate_system: '',
+        delegate_contacts: _dlgContacts.filter(c => (c.email||'').includes('@')),
+      });
+      await loadToolPrompts();
+      showToast('Промпт делегирования сброшен к дефолту', 'success');
     } catch (err) { showToast('Ошибка: ' + err.message, 'error'); }
   });
 

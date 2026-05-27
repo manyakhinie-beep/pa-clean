@@ -587,6 +587,112 @@ def get_draft_context(item_id: str):
     return ctx
 
 
+class DelegateSuggestRequest(BaseModel):
+    target_email: str
+    note: str = ""
+
+
+@router.get("/delegate-contacts")
+def get_delegate_contacts():
+    """Return the configured colleagues for the Inbox delegate action.
+
+    Mirrors what Rules → Инструменты persists in tool_prompts.json.  The
+    frontend uses this for the picker that appears under «🤝 Делегировать».
+    """
+    from personal_assistant.services.delegate_service import list_contacts
+    return {
+        "contacts": [
+            {"name": c.name, "email": c.email, "role": c.role, "note": c.note}
+            for c in list_contacts()
+        ]
+    }
+
+
+@router.post("/{item_id}/delegate-suggest")
+def delegate_suggest(item_id: str, req: DelegateSuggestRequest):
+    """Generate a forward-intro for delegating an inbox item to a colleague.
+
+    Pipeline:
+      1. Look up the colleague in tool_prompts.delegate_contacts.
+      2. Read the inbox item (subject, sender, body preview).
+      3. Build intro via MLX if engine is available, else rule-based.
+      4. Return the intro + suggested subject + draft payload ready for
+         POST ``/api/chat/save-draft-mail`` (the frontend forwards the
+         original message with this intro on top).
+
+    Returns 404 when the contact is unknown so the frontend can prompt the
+    user to configure colleagues in Rules first.
+    """
+    from personal_assistant.services.delegate_service import (
+        build_suggestion,
+        find_contact,
+    )
+
+    contact = find_contact(req.target_email)
+    if contact is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"Сотрудник {req.target_email!r} не настроен в Правила → "
+                "Инструменты → Делегирование."
+            ),
+        )
+
+    idx = _get_index()
+    if idx is None:
+        raise HTTPException(503, "Vault не загружен")
+
+    item: Optional[dict] = None
+    for doc in idx.docs:
+        fm = doc.frontmatter
+        doc_id = str(fm.get("id") or doc.path.stem)
+        if doc_id == item_id:
+            st = _get_item_state(item_id)
+            item = _doc_to_item(doc, st)
+            break
+    if item is None:
+        raise HTTPException(404, f"Item '{item_id}' not found")
+
+    mlx_engine = _get_mlx_engine()
+    suggestion = build_suggestion(
+        item=item,
+        contact=contact,
+        user_note=req.note,
+        mlx_engine=mlx_engine,
+    )
+
+    return {
+        "item_id": item_id,
+        "contact": {
+            "name": contact.name,
+            "email": contact.email,
+            "role": contact.role,
+            "note": contact.note,
+        },
+        "subject": suggestion.subject,
+        "intro": suggestion.intro,
+        "mlx_used": suggestion.mlx_used,
+        # Pre-built payload — the frontend can POST this verbatim to
+        # /api/chat/save-draft-mail to open Mail.app.
+        #
+        # NOTE: ``reply_to_message_id`` is intentionally null.  ``reply`` in
+        # AppleScript auto-fills To with the original sender (which is wrong
+        # for delegation — we want the colleague to be the sole recipient).
+        # The intro already references the original sender/subject in plain
+        # text, so the colleague has full context without a true Mail forward.
+        # A future iteration could add a ``forward_message_id`` mode for
+        # native "Begin forwarded message" semantics.
+        "draft_payload": {
+            "subject": suggestion.subject,
+            "body": suggestion.intro,
+            "to_recipients": [contact.email],
+            "cc_recipients": [],
+            "reply_to_message_id": None,
+            "save_to_drafts": False,
+        },
+    }
+
+
 @router.get("/{item_id}/suggestions")
 def get_suggestions(item_id: str):
     """Return rule-based next_actions and tag_suggestions for an inbox item."""

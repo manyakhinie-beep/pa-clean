@@ -88,6 +88,49 @@ export UV_PYTHON_INSTALL_MIRROR="<your-mirror>"   # если есть mirror pyt
 - Если хотите coverage и прокси даёт доступ:
   `uv sync --group cov` отдельно.
 
+### 1.1. Минимальная prod-сборка (`--no-dev`)
+
+Если на машине **не нужно** запускать тесты или линтеры (только сервер
+для повседневной работы), используйте `--no-dev` — это пропускает
+установку pytest/ruff/mypy и всех других dev-инструментов:
+
+```bash
+# Один раз — поставить только runtime-зависимости
+uv sync --no-dev
+
+# Каждый запуск — пропустить авто-sync (читает уже готовый .venv)
+uv run --no-sync pa check
+uv run --no-sync pa serve
+```
+
+Что попадает в `--no-dev`-venv:
+
+| Группа         | Включена в `--no-dev`? | Назначение                              |
+|----------------|------------------------|------------------------------------------|
+| `[project]`    | ✅                      | runtime: FastAPI, uvicorn, mlx-lm, и т.д.|
+| `[dependency-groups.dev]`  | ❌          | pytest, ruff, mypy, httpx-test           |
+| `[dependency-groups.cov]`  | ❌          | coverage (блокируется прокси Сбера)     |
+
+Преимущества:
+- **Быстрее**: venv весит ~700 МБ вместо ~1.2 ГБ.
+- **Меньше шансов нарваться на блок прокси** — pytest и ruff не тянутся.
+- **Чище pip-зависимости** в `uv.lock`-чтении.
+
+Минусы:
+- `pytest`, `ruff`, `mypy` недоступны — для CI/проверки качества нужна
+  отдельная dev-машина или `uv sync --group dev` поверх.
+- `pa check` всё ещё работает (это runtime-команда из самого пакета).
+
+Замена `fix_env.sh --online` для prod-сборки:
+
+```bash
+# В корне репо
+uv sync --no-dev
+(cd webui && npm install && npm run build)   # см. § 3
+```
+
+Готово — `.venv/bin/pa` доступен, `pa serve` запускается без dev-инструментов.
+
 ---
 
 ## 2. Обход auto-sync в `uv run` (если sync падает на проксе)

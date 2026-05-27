@@ -337,6 +337,180 @@
   &:hover { background: var(--color-bg-subtle); }
 }
 
+// ── Delegate modal ───────────────────────────────────────────────────────────
+.ib-delegate-modal {
+  position: fixed;
+  inset: 0;
+  z-index: $z-modal;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, .35);
+    backdrop-filter: blur(2px);
+  }
+
+  &__panel {
+    position: relative;
+    width: min(560px, calc(100vw - 32px));
+    max-height: calc(100vh - 64px);
+    background: var(--color-surface);
+    border-radius: $r-lg;
+    box-shadow: $shadow-pop;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: $sp-4 $sp-5;
+    border-bottom: 1px solid var(--color-border);
+
+    h3 {
+      margin: 0;
+      font-size: $size-lg;
+      font-weight: $fw-semibold;
+      color: var(--color-text);
+    }
+  }
+
+  &__close {
+    background: transparent;
+    border: none;
+    color: var(--color-text-muted);
+    font-size: 22px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    cursor: pointer;
+    line-height: 1;
+    transition: background $t-fast, color $t-fast;
+    &:hover { background: var(--color-bg-subtle); color: var(--color-text); }
+  }
+
+  &__body {
+    padding: $sp-4 $sp-5;
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  &__hint {
+    margin: 0 0 $sp-3;
+    font-size: $size-sm;
+    color: var(--color-text-muted);
+  }
+
+  &__contacts {
+    display: flex;
+    flex-direction: column;
+    gap: $sp-2;
+    margin-bottom: $sp-4;
+  }
+
+  &__note {
+    display: block;
+    margin-bottom: $sp-3;
+
+    > span {
+      display: block;
+      font-size: $size-sm;
+      font-weight: $fw-medium;
+      color: var(--color-text-muted);
+      margin-bottom: 4px;
+    }
+    textarea {
+      width: 100%;
+      padding: $sp-2 $sp-3;
+      border: 1px solid var(--color-border);
+      border-radius: $r-md;
+      font: inherit;
+      font-size: $size-sm;
+      resize: vertical;
+      min-height: 56px;
+      background: var(--color-surface);
+      color: var(--color-text);
+      &:focus { outline: none; border-color: var(--primary); }
+    }
+  }
+
+  &__preview {
+    background: var(--color-bg-subtle);
+    border: 1px solid var(--color-border);
+    border-radius: $r-md;
+    padding: $sp-3 $sp-4;
+    margin-top: $sp-3;
+
+    &-label {
+      font-size: 11px;
+      font-weight: $fw-semibold;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--color-text-faint);
+      margin-bottom: 6px;
+    }
+    &-subject {
+      font-size: $size-base;
+      font-weight: $fw-semibold;
+      color: var(--color-text);
+      margin-bottom: $sp-2;
+    }
+    &-intro {
+      font-size: $size-sm;
+      color: var(--color-text);
+      white-space: pre-wrap;
+      line-height: 1.55;
+      max-height: 240px;
+      overflow-y: auto;
+    }
+    &-flag {
+      margin-top: $sp-2;
+      font-size: 11px;
+      color: var(--color-text-faint);
+      font-style: italic;
+    }
+  }
+
+  &__footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: $sp-2;
+    padding: $sp-3 $sp-5;
+    border-top: 1px solid var(--color-border);
+    background: var(--color-bg-subtle);
+  }
+}
+
+.ib-delegate-contact {
+  display: flex;
+  align-items: flex-start;
+  gap: $sp-3;
+  padding: $sp-3;
+  border: 1px solid var(--color-border);
+  border-radius: $r-md;
+  cursor: pointer;
+  transition: border-color $t-fast, background $t-fast;
+
+  &:hover { background: var(--color-bg-subtle); }
+  &:has(input:checked) {
+    border-color: var(--primary);
+    background: var(--color-nav-active);
+  }
+  input[type="radio"] {
+    margin-top: 3px;
+    accent-color: var(--primary);
+  }
+  &__body  { flex: 1; min-width: 0; }
+  &__name  { font-size: $size-base; font-weight: $fw-semibold; color: var(--color-text); }
+  &__meta  { font-size: $size-sm;   color: var(--color-text-muted); margin-top: 2px; }
+  &__note  { font-size: $size-xs;   color: var(--color-text-faint); margin-top: 3px; font-style: italic; }
+}
+
 // ── Quick search bar ──────────────────────────────────────────────────────────
 .ib-search {
   position: relative;

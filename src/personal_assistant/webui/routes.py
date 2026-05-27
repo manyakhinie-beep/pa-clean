@@ -965,17 +965,32 @@ async def schedule_status():
 # ---------------------------------------------------------------------------
 
 
+class DelegateContactBody(BaseModel):
+    name: str = ""
+    email: str
+    role: str = ""
+    note: str = ""
+
+
 class ToolPromptsBody(BaseModel):
     draft_system: str = ""
     summarize_system: str = ""
+    delegate_system: str = ""
+    delegate_contacts: list[DelegateContactBody] = []
 
 
 @router.get("/tool-prompts")
 async def get_tool_prompts_api():
-    """Вернуть текущие промпты тулов (пользовательские + дефолты для UI)."""
+    """Вернуть текущие промпты тулов (пользовательские + дефолты для UI).
+
+    Plus the delegate-tool config: system prompt and the list of colleagues
+    the user can forward / delegate emails to.  The list is rendered both in
+    Rules → Инструменты (editor) and in the Inbox assistant panel (picker).
+    """
     from personal_assistant.config import settings as _cfg
     from personal_assistant.services.tool_prompts import (
         _PROMPTS_FILENAME,
+        DEFAULT_DELEGATE_SYSTEM,
         DEFAULT_DRAFT_SYSTEM,
         DEFAULT_SUMMARIZE_SYSTEM,
         get_tool_prompts,
@@ -988,18 +1003,26 @@ async def get_tool_prompts_api():
         # contract is consumed by older tests; keep it stable.
         "draft_system":               p.draft_system,
         "summarize_system":           p.summarize_system,
+        "delegate_system":            p.delegate_system,
+        "delegate_contacts":          [
+            {"name": c.name, "email": c.email, "role": c.role, "note": c.note}
+            for c in p.delegate_contacts
+        ],
         # Effective text shown in the textarea: user override if set, else
         # the built-in default. The UI displays the actual content so the
         # user can SEE and edit the default in place.
         "effective_draft_system":     p.draft_system or DEFAULT_DRAFT_SYSTEM,
         "effective_summarize_system": p.summarize_system or DEFAULT_SUMMARIZE_SYSTEM,
+        "effective_delegate_system":  p.delegate_system or DEFAULT_DELEGATE_SYSTEM,
         # Whether the effective text is the built-in default (badge in UI).
         "draft_is_default":           not p.draft_system.strip(),
         "summarize_is_default":       not p.summarize_system.strip(),
+        "delegate_is_default":        not p.delegate_system.strip(),
         # Defaults exposed verbatim so the UI can compute "Reset to default"
         # and detect "user edited content".
         "default_draft_system":       DEFAULT_DRAFT_SYSTEM,
         "default_summarize_system":   DEFAULT_SUMMARIZE_SYSTEM,
+        "default_delegate_system":    DEFAULT_DELEGATE_SYSTEM,
         # File-path alias (frontend reads ``file_path``; keep
         # ``prompts_file_path`` for backwards-compat).
         "file_path":                  prompts_file,
@@ -1012,6 +1035,7 @@ async def get_tool_prompts_api():
 async def save_tool_prompts_api(body: ToolPromptsBody):
     """Сохранить пользовательские промпты тулов (с валидацией)."""
     from personal_assistant.services.tool_prompts import (
+        DelegateContact,
         PromptValidationError,
         ToolPrompts,
         invalidate_cache,
@@ -1020,15 +1044,40 @@ async def save_tool_prompts_api(body: ToolPromptsBody):
     )
 
     try:
-        draft_clean    = validate_prompt(body.draft_system,    "draft_system")
+        draft_clean     = validate_prompt(body.draft_system,     "draft_system")
         summarize_clean = validate_prompt(body.summarize_system, "summarize_system")
+        delegate_clean  = validate_prompt(body.delegate_system,  "delegate_system")
     except PromptValidationError as exc:
         raise HTTPException(422, str(exc))
 
-    prompts = ToolPrompts(draft_system=draft_clean, summarize_system=summarize_clean)
+    # Validate / clean each delegate contact.  Reject duplicates by email
+    # (case-insensitive) — the UI picker must show each colleague once.
+    contacts: list[DelegateContact] = []
+    seen_emails: set[str] = set()
+    for c in body.delegate_contacts:
+        email = (c.email or "").strip()
+        if not email or "@" not in email:
+            continue
+        key = email.lower()
+        if key in seen_emails:
+            continue
+        seen_emails.add(key)
+        contacts.append(DelegateContact(
+            name=(c.name or email.split("@")[0]).strip()[:120],
+            email=email[:200],
+            role=(c.role or "").strip()[:120],
+            note=(c.note or "").strip()[:300],
+        ))
+
+    prompts = ToolPrompts(
+        draft_system=draft_clean,
+        summarize_system=summarize_clean,
+        delegate_system=delegate_clean,
+        delegate_contacts=contacts,
+    )
     save_tool_prompts(prompts)
     invalidate_cache()
-    return {"status": "ok"}
+    return {"status": "ok", "delegate_contacts_count": len(contacts)}
 
 
 # ---------------------------------------------------------------------------

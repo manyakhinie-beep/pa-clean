@@ -1036,6 +1036,22 @@
               <button class="btn btn--sm btn--secondary" id="tp-summarize-reset">Восстановить</button>
             </div>
 
+            <label class="rules__field-label" for="tp-delegate" style="margin-top:16px">🤝 Промпт для делегирования</label>
+            <textarea class="rules__code-editor" id="tp-delegate" rows="8" maxlength="8000" spellcheck="false"></textarea>
+            <div class="rules__field-footer">
+              <span class="rules__field-hint" id="tp-delegate-hint"></span>
+              <span><span id="tp-delegate-len">0</span>/8000</span>
+              <button class="btn btn--sm btn--secondary" id="tp-delegate-reset">Восстановить</button>
+            </div>
+
+            <!-- Delegate contacts list -->
+            <div class="rules__field-label" style="margin-top:20px">👥 Сотрудники для делегирования</div>
+            <p class="rules__section-desc" style="margin:0 0 8px">
+              Доступны в Inbox → Ассистент → 🤝 Делегировать. Email — обязателен, остальные поля — для подсказок.
+            </p>
+            <div id="dlg-contacts-list" style="display:flex;flex-direction:column;gap:6px"></div>
+            <button class="btn btn--sm btn--secondary" id="dlg-contacts-add" style="margin-top:8px">+ Добавить сотрудника</button>
+
             <div class="rules__apply-bar" style="margin-top:12px">
               <button class="btn" id="tp-save-btn">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>

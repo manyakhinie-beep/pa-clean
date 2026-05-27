@@ -84,6 +84,35 @@ DEFAULT_DRAFT_SYSTEM = """\
 Всегда отвечай на русском языке, если в инструкциях не указано иное.\
 """
 
+DEFAULT_DELEGATE_SYSTEM = """\
+Ты — помощник руководителя. На основе входящего письма и краткой заметки от руководителя
+составь короткое вводное сообщение для коллеги, которому передаётся задача.
+
+### Что нужно сделать
+
+1. Перескажи суть исходного письма (1-2 предложения): что просит отправитель, к какому сроку.
+2. Сформулируй конкретный вопрос/задачу для коллеги (1 предложение): что нужно сделать.
+3. При наличии заметки от руководителя — встрой её как контекст или акцент.
+4. Заверши вежливым обращением с просьбой ответить (или отметить статус) до конкретной даты,
+   если она упомянута, иначе — «в течение дня / двух дней».
+
+### Правила
+
+- Тон: деловой, нейтрально-вежливый. Без «пожалуйста, если не сложно».
+- Длина: 4-7 строк. Никакой воды, общих фраз, эмодзи.
+- Не дублируй цитату всего письма — даём только саммари. Mail сам прицепит forward с историей.
+- Имена, цифры, даты — сохрани точно.
+- Подпись не добавляй (Mail возьмёт стандартную).
+- Если в письме несколько вопросов — пронумеруй их в задаче.
+
+### Формат вывода
+
+Только тело письма-вводной, без темы и без «Кому». Тема и адресат подставляются автоматически.
+Никаких заголовков `### Вводная` — выводи сразу готовый текст письма.
+
+Всегда отвечай на русском языке.\
+"""
+
 DEFAULT_SUMMARIZE_SYSTEM = """\
 Ты — персональный ассистент, который сжимает длинные тексты в actionable резюме.
 
@@ -124,6 +153,20 @@ DEFAULT_SUMMARIZE_SYSTEM = """\
 
 # ─── Модель настроек ─────────────────────────────────────────────────────────
 
+
+@dataclass
+class DelegateContact:
+    """Один сотрудник, которому можно делегировать письмо.
+
+    Хранится в ``tool_prompts.json`` под ключом ``delegate_contacts``.
+    """
+
+    name: str
+    email: str
+    role: str = ""        # должность / роль для подсказки в UI
+    note: str = ""        # внутренняя заметка («ускоряет договоры», …)
+
+
 @dataclass
 class ToolPrompts:
     """Пользовательские системные промпты для AI-тулов."""
@@ -134,6 +177,17 @@ class ToolPrompts:
     summarize_system: str = ""
     """Системный промпт для инструмента «Суммаризация»."""
 
+    delegate_system: str = ""
+    """Системный промпт для инструмента «Делегировать»."""
+
+    delegate_contacts: list[DelegateContact] = None  # type: ignore[assignment]
+    """Список сотрудников, доступных для делегирования (Inbox → Ассистент)."""
+
+    def __post_init__(self) -> None:
+        # default_factory analogue for dataclass + frozen=False
+        if self.delegate_contacts is None:
+            self.delegate_contacts = []
+
     def effective_draft(self) -> str:
         """Вернуть активный промпт для черновика (пользовательский или дефолтный)."""
         v = self.draft_system.strip()
@@ -143,6 +197,11 @@ class ToolPrompts:
         """Вернуть активный промпт для суммаризации (пользовательский или дефолтный)."""
         v = self.summarize_system.strip()
         return v if v else DEFAULT_SUMMARIZE_SYSTEM
+
+    def effective_delegate(self) -> str:
+        """Вернуть активный промпт делегирования (пользовательский или дефолтный)."""
+        v = self.delegate_system.strip()
+        return v if v else DEFAULT_DELEGATE_SYSTEM
 
 
 # ─── Валидация ────────────────────────────────────────────────────────────────
@@ -198,6 +257,25 @@ def _prompts_path() -> Path:
     return Path(settings.vault_path) / _PROMPTS_FILENAME
 
 
+def _normalize_contact(raw: dict) -> Optional[DelegateContact]:
+    """Coerce a raw dict from JSON into a ``DelegateContact``.
+
+    Rejects entries without a valid ``email`` (we need it for Mail.app), and
+    trims long strings so a malformed config file never blows up the UI.
+    """
+    if not isinstance(raw, dict):
+        return None
+    email = str(raw.get("email", "")).strip()
+    if not email or "@" not in email:
+        return None
+    return DelegateContact(
+        name=str(raw.get("name", "")).strip()[:120] or email.split("@")[0],
+        email=email[:200],
+        role=str(raw.get("role", "")).strip()[:120],
+        note=str(raw.get("note", "")).strip()[:300],
+    )
+
+
 def load_tool_prompts() -> ToolPrompts:
     """Загрузить промпты из vault/.tool_prompts.json. При ошибке — дефолтные."""
     path = _prompts_path()
@@ -205,9 +283,18 @@ def load_tool_prompts() -> ToolPrompts:
         return ToolPrompts()
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
+        contacts_raw = data.get("delegate_contacts") or []
+        contacts: list[DelegateContact] = []
+        if isinstance(contacts_raw, list):
+            for r in contacts_raw:
+                c = _normalize_contact(r)
+                if c:
+                    contacts.append(c)
         return ToolPrompts(
             draft_system=data.get("draft_system", ""),
             summarize_system=data.get("summarize_system", ""),
+            delegate_system=data.get("delegate_system", ""),
+            delegate_contacts=contacts,
         )
     except Exception as exc:
         logger.warning(f"Не удалось загрузить tool_prompts.json: {exc}")
@@ -219,8 +306,10 @@ def save_tool_prompts(prompts: ToolPrompts) -> None:
     path = _prompts_path()
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
+        # Dump via asdict — handles nested DelegateContact correctly.
+        payload = asdict(prompts)
         path.write_text(
-            json.dumps(asdict(prompts), ensure_ascii=False, indent=2),
+            json.dumps(payload, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
         logger.info(f"tool_prompts.json сохранён: {path}")

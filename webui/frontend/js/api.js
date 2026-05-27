@@ -207,6 +207,8 @@ export const api = {
   inboxMarkRead:        (id)                      => post(`/api/v1/inbox/${encodeURIComponent(id)}/read`),
   inboxMarkUnread:      (id)                      => post(`/api/v1/inbox/${encodeURIComponent(id)}/unread`),
   inboxMarkReadBatch:   (item_ids, read=true)       => post('/api/v1/inbox/mark-read-batch', { item_ids, read }),
+  inboxDelegateContacts: ()                          => get('/api/v1/inbox/delegate-contacts'),
+  inboxDelegateSuggest: (id, target_email, note='')  => post(`/api/v1/inbox/${encodeURIComponent(id)}/delegate-suggest`, { target_email, note }),
   inboxSetTags:         (id, tags, mode='set')    => post(`/api/v1/inbox/${encodeURIComponent(id)}/tags`, { tags, mode }),
   inboxAssignProject:   (id, project_id, project_name) => post(`/api/v1/inbox/${encodeURIComponent(id)}/assign-project`, { project_id, project_name }),
   inboxSuggestions:     (id)                      => get(`/api/v1/inbox/${encodeURIComponent(id)}/suggestions`),

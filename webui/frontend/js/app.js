@@ -7,9 +7,9 @@ import { initVault }    from './vault.js?v=20260520153419';
 import { initProjects } from './projects.js?v=20260520153419';
 import { initSearch }   from './search.js?v=20260526131517';
 import { initSettings } from './settings.js?v=20260520153419';
-import { initRules }    from './rules.js?v=20260520153419';
+import { initRules }    from './rules.js?v=20260527072723';
 import { initReports }  from './reports.js?v=20260520153419';
-import { initInbox }    from './inbox.js?v=20260527064445';
+import { initInbox }    from './inbox.js?v=20260527072723';
 import { initToday }    from './today.js?v=20260526121929';
 
 // ── Toast ────────────────────────────────────────────────────────────────────
