@@ -958,6 +958,107 @@
     padding: 1px 5px;
     border-radius: $r-sm;
   }
+
+  // ── Email-specific elements (rendered by _emailToHtml) ────────────────
+
+  // Quoted reply block — coloured left bar, depth-aware nested styling.
+  // The depth modifier shifts hue subtly so 3-level deep quotes stay legible.
+  .ib-email-quote {
+    margin: $sp-4 0;
+    padding: $sp-2 $sp-4;
+    border-left: 3px solid #93c5fd;
+    background: rgba(96, 165, 250, .06);
+    color: var(--color-text-muted);
+    border-radius: 0 $r-sm $r-sm 0;
+
+    & > p { margin: 0 0 $sp-2; }
+    & > p:last-child { margin-bottom: 0; }
+
+    // Nested quote (reply chain)
+    & .ib-email-quote {
+      border-left-color: #c4b5fd;
+      background: rgba(167, 139, 250, .06);
+    }
+    & .ib-email-quote .ib-email-quote {
+      border-left-color: #fda4af;
+      background: rgba(244, 114, 182, .06);
+    }
+  }
+  // Direct depth class hints (when set explicitly)
+  .ib-email-quote--d1 { border-left-color: #93c5fd; }
+  .ib-email-quote--d2 { border-left-color: #c4b5fd; background: rgba(167,139,250,.06); }
+  .ib-email-quote--d3 { border-left-color: #fda4af; background: rgba(244,114,182,.06); }
+  .ib-email-quote--d4 { border-left-color: #fcd34d; background: rgba(251,191,36,.06); }
+
+  // Forwarded-message banner ("---------- Forwarded message ----------")
+  .ib-email-forward-header {
+    margin: $sp-5 0 $sp-3;
+    padding: $sp-2 $sp-3;
+    background: var(--color-bg-subtle);
+    border: 1px solid var(--color-border);
+    border-radius: $r-md;
+    font-size: 12px;
+    font-weight: $fw-semibold;
+    color: var(--color-text-muted);
+    letter-spacing: .02em;
+  }
+
+  // Inline reply-intro ("On Mon, May 26, 2026 at 14:30, Alice wrote:")
+  .ib-email-reply-intro {
+    margin: $sp-3 0 4px;
+    font-size: 12px;
+    color: var(--color-text-faint);
+    font-style: italic;
+  }
+
+  // Signature block (after "-- " separator) — muted, smaller
+  .ib-email-signature {
+    margin-top: $sp-5;
+    padding-top: $sp-3;
+    border-top: 1px dashed var(--color-border);
+    color: var(--color-text-muted);
+    font-size: 13px;
+    line-height: 1.5;
+
+    & > p:first-child { margin-top: 0; }
+  }
+
+  // Horizontal rule between message segments
+  .ib-email-hr {
+    border: none;
+    border-top: 1px solid var(--color-border);
+    margin: $sp-5 0;
+  }
+
+  // Headings (ai summaries / structured content)
+  .ib-email-h2 {
+    font-size: 16px;
+    font-weight: $fw-semibold;
+    margin: $sp-5 0 $sp-2;
+    color: var(--color-text);
+  }
+  .ib-email-h3 {
+    font-size: 14px;
+    font-weight: $fw-semibold;
+    margin: $sp-4 0 $sp-2;
+    color: var(--color-text);
+  }
+
+  // Preformatted / code block
+  .ib-email-code {
+    background: var(--color-bg-subtle);
+    border: 1px solid var(--color-border);
+    border-radius: $r-md;
+    padding: $sp-3 $sp-4;
+    margin: $sp-3 0;
+    overflow-x: auto;
+    font-family: $font-mono;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--color-text);
+
+    & code { background: transparent; padding: 0; border-radius: 0; }
+  }
 }
 
 // ── Assistant panel ───────────────────────────────────────────────────────────

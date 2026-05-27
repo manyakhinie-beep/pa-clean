@@ -1708,18 +1708,252 @@ function setupFilterTabs() {
 }
 
 // ---------------------------------------------------------------------------
-// Markdown → HTML (minimal)
+// Email body → HTML
 // ---------------------------------------------------------------------------
-function _md2html(md) {
-  if (!md) return '';
-  let html = _esc(md);
-  html = html.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
-  html = html.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
-  html = html.replace(/\n\n+/g, '</p><p>');
-  html = '<p>' + html + '</p>';
-  html = html.replace(/<p>\s*<\/p>/g, '');
-  return html;
+//
+// Renders the stored mail body the way real email clients do: quoted
+// replies indented as blockquotes, forwarded-message banners visually
+// separated, signatures muted, lists/headers/links/inline-code parsed.
+//
+// We deliberately do NOT pull a markdown library in — vault bodies are
+// AppleScript-extracted plain text with some markdown leakage from AI
+// summaries, not full Commonmark.  A focused parser is faster and yields
+// cleaner output for the email use case.
+
+// Forwarded-message banners across English / Russian Mail clients.
+const _FORWARD_HEADER_RE = new RegExp(
+  '^(' +
+    '-{2,}\\s*(forwarded message|пересланное сообщение|переадресованное сообщение|begin forwarded message)[\\s:-]*' +
+  '|' +
+    '={3,}\\s*(forwarded|переслано)' +
+  '|' +
+    'begin forwarded message:?' +
+  ')$',
+  'i'
+);
+
+// "On Mon, May 26, 2026 at 14:30, Alice wrote:" / "Алиса написала:" /
+// "26 мая 2026 г., в 14:30, Алиса написал(а):"
+const _REPLY_INTRO_RE = new RegExp(
+  '^(?:on .+ wrote:?$' +
+  '|.+ написал(?:\\(а\\)|а)?:$' +
+  '|.+ writes?:$' +
+  '|le .+ a écrit\\s*:$' +
+  '|.+ schrieb am .+:$' +
+  ')',
+  'i'
+);
+
+// Auto-link URLs and bare emails.  Excludes trailing punctuation.
+const _URL_RE   = /\b(https?:\/\/[^\s<>"']+[^\s<>"',.;:!?)\]}])/g;
+const _EMAIL_RE = /\b([\w._%+-]+@[\w.-]+\.[a-z]{2,})\b/gi;
+
+/** Apply inline markdown + auto-links on already-escaped text. */
+function _inline(text) {
+  // Inline code first so other patterns don't run inside.
+  text = text.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+  text = text.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  text = text.replace(/\b_([^_\n]+)_\b/g, '<em>$1</em>');
+  text = text.replace(/(?<![*\w])\*([^*\n]+)\*(?!\w)/g, '<em>$1</em>');
+  text = text.replace(/~~([^~\n]+)~~/g, '<del>$1</del>');
+  // [label](url) — must run before bare URL autolinking
+  text = text.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g,
+    (_m, label, url) => `<a href="${url}" target="_blank" rel="noopener">${label}</a>`);
+  // Bare URLs
+  text = text.replace(_URL_RE,
+    (_m, url) => `<a href="${url}" target="_blank" rel="noopener">${url}</a>`);
+  // Bare emails → mailto
+  text = text.replace(_EMAIL_RE,
+    (_m, email) => `<a href="mailto:${email}">${email}</a>`);
+  return text;
 }
+
+/** Strip leading "> " from a line, repeatedly, returning {depth, rest}. */
+function _stripQuote(line) {
+  let depth = 0;
+  while (true) {
+    const m = line.match(/^>\s?(.*)$/);
+    if (!m) break;
+    depth += 1;
+    line = m[1];
+  }
+  return { depth, rest: line };
+}
+
+/** Convert one logical block of paragraph text to <p>…</p> with <br> for
+ *  internal single newlines.  Email bodies often have soft wraps. */
+function _paragraphHtml(lines) {
+  if (!lines.length) return '';
+  const txt = lines.join('\n').trim();
+  if (!txt) return '';
+  // Escape, then apply inline rules, then turn \n into <br>.
+  const escaped = _esc(txt);
+  const withInline = _inline(escaped);
+  return `<p>${withInline.replace(/\n/g, '<br>')}</p>`;
+}
+
+/** Email-aware text → HTML renderer (export-shaped so we can also unit-test it). */
+function _emailToHtml(raw) {
+  if (!raw) return '';
+
+  // Normalise line endings + collapse 4+ blank lines into 2 (some Mail
+  // clients pad with spam-like vertical space).
+  const text = String(raw)
+    .replace(/\r\n?/g, '\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{4,}/g, '\n\n\n');
+
+  const lines = text.split('\n');
+  const out = [];
+
+  // Block-level state machine
+  let para = [];        // accumulating paragraph lines
+  let quoteBuf = [];    // accumulating quoted lines (raw, after one strip)
+  let quoteDepth = 0;
+  let listType = null;  // 'ul' | 'ol' | null
+  let listItems = [];
+  let codeFence = null; // current code-block content lines
+  let signatureMode = false;
+
+  const flushPara = () => {
+    if (para.length) {
+      out.push(_paragraphHtml(para));
+      para = [];
+    }
+  };
+  const flushQuote = () => {
+    if (quoteBuf.length) {
+      const inner = _emailToHtml(quoteBuf.join('\n'));
+      out.push(`<blockquote class="ib-email-quote ib-email-quote--d${Math.min(quoteDepth,4)}">${inner}</blockquote>`);
+      quoteBuf = [];
+      quoteDepth = 0;
+    }
+  };
+  const flushList = () => {
+    if (listType && listItems.length) {
+      const tag = listType;
+      const items = listItems.map(item =>
+        `<li>${_inline(_esc(item))}</li>`).join('');
+      out.push(`<${tag}>${items}</${tag}>`);
+      listType = null;
+      listItems = [];
+    }
+  };
+  const flushAll = () => { flushPara(); flushQuote(); flushList(); };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // ── Code fence ───────────────────────────────────────────────────────
+    if (codeFence !== null) {
+      if (/^```\s*$/.test(trimmed)) {
+        out.push(`<pre class="ib-email-code"><code>${_esc(codeFence.join('\n'))}</code></pre>`);
+        codeFence = null;
+      } else {
+        codeFence.push(line);
+      }
+      continue;
+    }
+    if (/^```/.test(trimmed)) {
+      flushAll();
+      codeFence = [];
+      continue;
+    }
+
+    // ── Signature separator "-- " (canonical: exactly two dashes) ───────
+    // Strict: only "--" after trim — ``---`` and longer are horizontal rules.
+    if (trimmed === '--') {
+      flushAll();
+      signatureMode = true;
+      out.push('<div class="ib-email-signature">');
+      continue;
+    }
+
+    // ── Forwarded-message banner ─────────────────────────────────────────
+    if (_FORWARD_HEADER_RE.test(trimmed)) {
+      flushAll();
+      out.push(`<div class="ib-email-forward-header">↪ ${_esc(trimmed.replace(/^-+\s*|\s*-+$/g, ''))}</div>`);
+      continue;
+    }
+
+    // ── Inline reply-intro ("On Mon, … wrote:" / "Алиса написала:") ──────
+    if (_REPLY_INTRO_RE.test(trimmed)) {
+      flushAll();
+      out.push(`<div class="ib-email-reply-intro">${_esc(trimmed)}</div>`);
+      continue;
+    }
+
+    // ── Quoted reply (one or more leading "> ") ─────────────────────────
+    if (/^>/.test(trimmed)) {
+      flushPara(); flushList();
+      const { depth, rest } = _stripQuote(line.replace(/^\s+/, ''));
+      if (quoteBuf.length && depth !== quoteDepth) {
+        // Depth changed — flush previous block to render separate quotes
+        flushQuote();
+      }
+      quoteDepth = depth;
+      quoteBuf.push(rest);
+      continue;
+    }
+
+    // ── Horizontal rule ──────────────────────────────────────────────────
+    if (/^(?:-{3,}|_{3,}|\*{3,})$/.test(trimmed)) {
+      flushAll();
+      out.push('<hr class="ib-email-hr">');
+      continue;
+    }
+
+    // ── Headings (only ## and ###; # is too greedy in plain emails) ──────
+    const hm = trimmed.match(/^(#{2,3})\s+(.+)$/);
+    if (hm) {
+      flushAll();
+      const level = hm[1].length;
+      out.push(`<h${level} class="ib-email-h${level}">${_inline(_esc(hm[2]))}</h${level}>`);
+      continue;
+    }
+
+    // ── Unordered list "- item" / "* item" / "• item" ────────────────────
+    const um = line.match(/^\s*[-*•]\s+(.*)$/);
+    if (um) {
+      flushPara(); flushQuote();
+      if (listType !== 'ul') { flushList(); listType = 'ul'; }
+      listItems.push(um[1]);
+      continue;
+    }
+    // ── Ordered list "1. item" / "1) item" ───────────────────────────────
+    const om = line.match(/^\s*\d+[.)]\s+(.*)$/);
+    if (om) {
+      flushPara(); flushQuote();
+      if (listType !== 'ol') { flushList(); listType = 'ol'; }
+      listItems.push(om[1]);
+      continue;
+    }
+    // If we were in a list and hit a non-list, non-empty line → close list
+    if (listType && trimmed === '') { flushList(); continue; }
+    if (listType && trimmed !== '') { flushList(); }
+
+    // ── Blank line → paragraph boundary ──────────────────────────────────
+    if (trimmed === '') {
+      flushPara(); flushQuote();
+      continue;
+    }
+
+    // ── Default: accumulate into current paragraph ───────────────────────
+    flushQuote();
+    para.push(line);
+  }
+
+  flushAll();
+  if (codeFence !== null) {
+    out.push(`<pre class="ib-email-code"><code>${_esc(codeFence.join('\n'))}</code></pre>`);
+  }
+  if (signatureMode) out.push('</div>');
+  return out.join('\n');
+}
+
+// Kept as alias for any older callers / tests.
+const _md2html = _emailToHtml;
 
 // ---------------------------------------------------------------------------
 // Init
