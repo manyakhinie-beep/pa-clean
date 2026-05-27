@@ -2000,6 +2000,13 @@ export function initInbox(ctx) {
     loadInbox();
   });
 
+  // When the user presses Применить / Сбросить in Rules → GTD-правила,
+  // re-fetch the inbox so the rule-derived tags (is_urgent / is_important /
+  // followup_needed + tag pills) are recomputed against the latest rules
+  // from gtd_rules.json + rules.json.
+  document.addEventListener('pa:rules-changed', () => loadInbox());
+  document.addEventListener('pa:vault-reloaded',  () => loadInbox());
+
   // Initial load
   loadInbox();
 }

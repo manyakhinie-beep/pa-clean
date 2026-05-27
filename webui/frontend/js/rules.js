@@ -323,15 +323,51 @@ function initGtdRules(ctx) {
       gtdOriginal = JSON.stringify(gtdRules);
       _updateStatus('Применено ✓', true);
       setTimeout(() => _updateStatus('', false), 2500);
-      showToast('GTD-правила применены', 'success');
+      showToast('GTD-правила применены — теги Inbox обновлены', 'success');
+      // Tell the Inbox tab to re-fetch its list so the rules are re-applied
+      // immediately (inbox_rules_service merges rule-derived flags at list
+      // time).  Without this dispatch the user sees stale tags until they
+      // manually reload the Inbox tab.
+      document.dispatchEvent(new Event('pa:rules-changed'));
+      document.dispatchEvent(new Event('pa:vault-reloaded'));
     } catch (err) { showToast('Ошибка: ' + err.message, 'error'); }
   });
 
   resetBtn?.addEventListener('click', async () => {
-    if (!confirm('Сбросить все GTD-правила и структурированные правила к последнему сохранённому состоянию?')) return;
-    await loadGtdRules();
-    _updateStatus('Сброшено', false);
-    setTimeout(() => _updateStatus('', false), 2000);
+    // The "Сбросить" button now WIPES all GTD rules — both simple
+    // (gtd_rules.json) and structured (rules.json) — and forces the Inbox
+    // to drop any rule-derived tags.  The previous behaviour ("revert to
+    // last saved") was confusing because the user expected "Сбросить" to
+    // clear, not undo.
+    if (!confirm(
+      'Удалить ВСЕ GTD-правила и структурированные правила? ' +
+      'Теги, добавленные этими правилами, исчезнут из Inbox. ' +
+      'Это действие нельзя отменить.'
+    )) return;
+    try {
+      // Wipe both stores
+      await api.gtdRulesSave([]);
+      // Also clear structured rules; rulesList/rulesDelete is the lone
+      // accessor we have, so iterate over the current set.
+      try {
+        const data = await api.rulesList();
+        for (const r of (data.rules || data || [])) {
+          if (r && r.id) {
+            try { await api.rulesDelete(r.id); } catch (_) {}
+          }
+        }
+      } catch (_) { /* no structured rules endpoint — fine */ }
+      gtdRules = [];
+      gtdOriginal = JSON.stringify(gtdRules);
+      renderGtdRules();
+      updateGtdCount();
+      _updateStatus('Сброшено ✓', true);
+      setTimeout(() => _updateStatus('', false), 2500);
+      showToast('Все правила удалены — Inbox перезагружается', 'success');
+      // Notify other tabs to re-render without rule flags
+      document.dispatchEvent(new Event('pa:rules-changed'));
+      document.dispatchEvent(new Event('pa:vault-reloaded'));
+    } catch (err) { showToast('Ошибка сброса: ' + err.message, 'error'); }
   });
 
   loadGtdRules();
@@ -355,11 +391,17 @@ function initStructuredRules(ctx) {
 
     const header = document.createElement('div');
     header.style.cssText = 'display:flex;gap:8px;padding:6px 0;border-bottom:2px solid var(--color-border);font-size:10px;font-weight:700;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:.04em';
+    // Wider quadrant column so "Q1 Срочно & Важно" fits without ellipsis;
+    // narrower priority column (numbers fit in 60px) to compensate.
     header.innerHTML = `
-      <div style="flex:2">Название</div><div style="flex:3">Ключевые слова</div>
-      <div style="flex:3">Контакты</div><div style="flex:2">Квадрант</div>
-      <div style="flex:2">Действие</div><div style="flex:0 0 70px">Приор.</div>
-      <div style="flex:0 0 60px;text-align:center">Вкл</div><div style="flex:0 0 28px"></div>
+      <div style="flex:2;min-width:120px">Название</div>
+      <div style="flex:3;min-width:140px">Ключевые слова</div>
+      <div style="flex:3;min-width:140px">Контакты</div>
+      <div style="flex:0 0 150px">Квадрант</div>
+      <div style="flex:2;min-width:110px">Действие</div>
+      <div style="flex:0 0 60px">Приор.</div>
+      <div style="flex:0 0 50px;text-align:center">Вкл</div>
+      <div style="flex:0 0 28px"></div>
     `;
     container.appendChild(header);
 
@@ -375,27 +417,29 @@ function initStructuredRules(ctx) {
       const row = document.createElement('div');
       row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--color-border)';
       const qLabel = QUADRANT_LABELS[rule.eisenhower_quadrant] || '—';
-      const aLabel = ACTION_LABELS[rule.action_type] || '—';
+      // Column widths mirror the header: fixed 150px for the quadrant
+      // button so "Q1 Срочно & Важно" fits without ellipsis; smaller
+      // priority/enabled columns leave room.
       row.innerHTML = `
-        <input class="settings__input" style="flex:2" placeholder="Название"
+        <input class="settings__input" style="flex:2;min-width:120px" placeholder="Название"
           value="${_esc(rule.name||'')}" data-field="name" data-idx="${idx}">
-        <input class="settings__input" style="flex:3" placeholder="слово1, слово2"
+        <input class="settings__input" style="flex:3;min-width:140px" placeholder="слово1, слово2"
           value="${_esc((rule.keywords||[]).join(', '))}" data-field="keywords" data-idx="${idx}">
-        <input class="settings__input" style="flex:3" placeholder="email1, email2"
+        <input class="settings__input" style="flex:3;min-width:140px" placeholder="email1, email2"
           value="${_esc((rule.contacts||[]).join(', '))}" data-field="contacts" data-idx="${idx}">
-        <button class="btn btn--sm btn--secondary" style="flex:2;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+        <button class="btn btn--sm btn--secondary" style="flex:0 0 150px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
           data-pick-quadrant="${idx}" title="${_esc(qLabel)}">${_esc(qLabel)}</button>
-        <select class="settings__input" style="flex:2;font-size:11px" data-field="action_type" data-idx="${idx}">
+        <select class="settings__input" style="flex:2;min-width:110px;font-size:11px" data-field="action_type" data-idx="${idx}">
           ${Object.entries(ACTION_LABELS).map(([k,v])=>`<option value="${k}"${rule.action_type===k?' selected':''}>${v}</option>`).join('')}
         </select>
-        <input type="number" class="settings__input" style="flex:0 0 70px" min="1" max="999"
+        <input type="number" class="settings__input" style="flex:0 0 60px" min="1" max="999"
           value="${rule.priority||100}" data-field="priority" data-idx="${idx}">
-        <div style="flex:0 0 60px;display:flex;justify-content:center">
+        <div style="flex:0 0 50px;display:flex;justify-content:center">
           <input type="checkbox" ${rule.enabled!==false?'checked':''} data-field="enabled" data-idx="${idx}"
             style="accent-color:var(--primary);width:15px;height:15px;cursor:pointer">
         </div>
         <button class="btn btn--sm" style="flex:0 0 28px;background:#fee2e2;color:#ef4444;border:none;padding:0;width:28px;justify-content:center"
-          data-delete="${idx}">✕</button>
+          data-delete="${idx}" title="Удалить правило">✕</button>
       `;
       row.querySelectorAll('[data-field]').forEach(el => {
         const sync = () => {

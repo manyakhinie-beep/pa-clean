@@ -67,9 +67,12 @@ $q4-color: #6b7280;  $q4-bg: #f9fafb;  $q4-dot: #9ca3af;
   }
 
   // ── Panel (each sub-tab content) ───────────────────────────────────────
+  // ``overflow: hidden`` would clip the rightmost column of the structured
+  // -rules grid (Вкл + ✕ delete) when the side-panel is narrow. Switch to
+  // ``overflow: auto`` so the panel scrolls instead of cropping content.
   &__panel {
     flex: 1;
-    overflow: hidden;
+    overflow: auto;
     display: flex;
     flex-direction: column;
 
@@ -78,6 +81,16 @@ $q4-color: #6b7280;  $q4-bg: #f9fafb;  $q4-dot: #9ca3af;
       padding: 24px;
       gap: 0;
     }
+  }
+
+  // The structured-rules grid is wide (8 columns + ✕ delete).  Give it its
+  // own horizontal scroll so the rightmost cells never get clipped on
+  // narrow viewports; rows guarantee a minimum width so cells stay legible.
+  &__sr-grid,
+  #structured-rules-container,
+  #gtd-rules-list {
+    overflow-x: auto;
+    & > * { min-width: 740px; }
   }
 
   // ── Sections (inside GTD and Инструменты) ──────────────────────────────
