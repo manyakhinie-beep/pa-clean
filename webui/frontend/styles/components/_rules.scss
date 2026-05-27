@@ -571,9 +571,27 @@ $q4-color: #6b7280;  $q4-bg: #f9fafb;  $q4-dot: #9ca3af;
   font-weight: 600;
   margin: 2px;
   border: 1px solid transparent;
+  white-space: nowrap;
 
-  &--urgency-urgent    { background: #ffeaea; color: #c62828; }
-  &--urgency-important { background: #fff8e1; color: #e65100; }
+  // GTD-rule chips (Срочно / Важно / Ответить) — stronger borders so they
+  // stand out at a glance in dense Inbox rows.  Each emoji is wrapped in
+  // a slightly bolder bg/fg combo than the soft classifier pills below.
+  &--urgency-urgent {
+    background: #FFEBEE;
+    color:      #C62828;
+    border-color: rgba(198, 40, 40, .25);
+  }
+  &--urgency-important {
+    background: #FFF8E1;
+    color:      #E65100;
+    border-color: rgba(230, 81, 0, .25);
+  }
+  &--reply {
+    background: #E3F2FD;
+    color:      #1565C0;
+    border-color: rgba(21, 101, 192, .25);
+  }
+
   &--urgency-low       { background: #e8f5e9; color: #2e7d32; }
   &--category-finance  { background: #e6f9ed; color: #1a7f37; }
   &--category-meetings { background: #e8eaf6; color: #283593; }
@@ -581,5 +599,6 @@ $q4-color: #6b7280;  $q4-bg: #f9fafb;  $q4-dot: #9ca3af;
   &--category-hr       { background: #fff3e0; color: #bf360c; }
   &--category-legal    { background: #f3e5f5; color: #6a1b9a; }
   &--category-travel   { background: #e1f5fe; color: #01579b; }
+  &--rule              { background: var(--color-bg-subtle); color: var(--color-text-muted); }
   &--default           { background: var(--color-hover); color: var(--color-text-muted); }
 }

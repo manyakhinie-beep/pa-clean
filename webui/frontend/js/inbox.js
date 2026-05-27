@@ -211,6 +211,12 @@ function _renderItemHtml(item, inThread = false) {
   const urgent  = item.is_urgent   ? ' ib-item--urgent'  : '';
   const indent  = inThread         ? ' ib-item--in-thread' : '';
   const tags    = renderTagBadges(item.tags);
+  // GTD-rule chips — explicit pills rendered when rules set is_urgent /
+  // is_important / followup_needed (see inbox_rules_service).  This is
+  // the visual proof the user asked for: «значки тегов в Inbox должны
+  // отображаться на основе GTD-правил».  Chips are prepended to the
+  // tags row so they always appear first.
+  const ruleChips = _ruleChipsHtml(item);
   const typeIcon = item.type === 'meeting'
     ? '<svg class="ib-item-type-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z"/></svg>'
     : '';
@@ -280,9 +286,31 @@ function _renderItemHtml(item, inThread = false) {
       </div>
       <div class="ib-item-subject">${typeIcon}${_esc(item.subject)}</div>
       ${previewHtml}
-      ${tags ? `<div class="ib-item-tags">${tags}</div>` : ''}
+      ${(ruleChips || tags) ? `<div class="ib-item-tags">${ruleChips}${tags}</div>` : ''}
     </div>
   </div>`;
+}
+
+/** Render the GTD-rule-derived chips (Срочно / Важно / Ответить).
+ *
+ *  Returns HTML for the three pills; each appears only when the
+ *  corresponding flag was set by ``inbox_rules_service``.  Pills use the
+ *  existing ``rules-tag-pill`` style so they match the chips you see in
+ *  Rules → Tools and Search.
+ */
+function _ruleChipsHtml(item) {
+  if (!item) return '';
+  const out = [];
+  if (item.is_urgent) {
+    out.push('<span class="rules-tag-pill rules-tag-pill--urgency-urgent" title="GTD-правило: Срочно">🔴 Срочно</span>');
+  }
+  if (item.is_important) {
+    out.push('<span class="rules-tag-pill rules-tag-pill--urgency-important" title="GTD-правило: Важно">🟡 Важно</span>');
+  }
+  if (item.followup_needed) {
+    out.push('<span class="rules-tag-pill rules-tag-pill--reply" title="GTD-правило: Требуется ответ">🔔 Ответить</span>');
+  }
+  return out.join('');
 }
 
 // ---------------------------------------------------------------------------
