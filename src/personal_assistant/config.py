@@ -235,6 +235,14 @@ class Settings:
         # to True so the WebUI reply flow works out of the box; users with
         # huge inboxes can disable via PA_MAIL_FETCH_RECIPIENTS=false.
         self.mail_fetch_recipients: bool = _env_bool("MAIL_FETCH_RECIPIENTS", True)
+        # Pull the full RFC822 ``source of msg`` instead of just rendered
+        # plain text — this lets us extract the HTML MIME part and convert
+        # it to Markdown so bullet lists / bold / links survive in the
+        # vault and render natively in the WebUI Inbox.
+        # Trade-off: source is 5-100x bigger per message, sync gets slower.
+        # Opt-in via PA_MAIL_FETCH_RAW_SOURCE=true. Default False keeps the
+        # legacy fast path.
+        self.mail_fetch_raw_source: bool = _env_bool("MAIL_FETCH_RAW_SOURCE", False)
         self.mail_fetch_attachments: bool = _env_bool("MAIL_FETCH_ATTACHMENTS", False)
         self.mail_attachments_path: str = _env(
             "MAIL_ATTACHMENTS_PATH",

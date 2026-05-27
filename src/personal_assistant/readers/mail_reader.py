@@ -208,7 +208,26 @@ _RECIPIENTS_BLOCK = """\
 # Injected when fetch_recipients=False
 _RECIPIENTS_SKIP = '        set recipEmails to ""\n        set recipCcEmails to ""'
 
-# Injected when fetch_body=True
+_RFC822_HEADER_RE = re.compile(
+    r"^\s*(from|return-path|received|mime-version|content-type|message-id|subject)\s*:",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_rfc822(text: str) -> bool:
+    """Cheap heuristic: does *text* look like an RFC822 source dump?
+
+    Looks for a typical mail header in the first 4 KB of the body.  We
+    cap the scan because some inboxes ship 100 KB+ HTML emails — running
+    a regex over the full payload on every message is wasted work.
+    """
+    if not text or len(text) < 20:
+        return False
+    head = text[:4096]
+    return bool(_RFC822_HEADER_RE.match(head))
+
+
+# Injected when fetch_body=True and fetch_raw_source=False — plain rendered text.
 _BODY_BLOCK = """\
         set msgBody to ""
         try
@@ -217,6 +236,26 @@ _BODY_BLOCK = """\
                 set msgBody to my esc(bodyText as string)
             end if
         end try"""
+
+# Injected when fetch_body=True and fetch_raw_source=True — full RFC822
+# source so the Python side can extract text/html and convert to Markdown.
+# Falls back to ``content of msg`` when ``source`` is missing or fails.
+_BODY_BLOCK_RAW = """\
+        set msgBody to ""
+        try
+            set rawSrc to source of msg
+            if rawSrc is not missing value then
+                set msgBody to my esc(rawSrc as string)
+            end if
+        end try
+        if msgBody is "" then
+            try
+                set bodyText to content of msg
+                if bodyText is not missing value then
+                    set msgBody to my esc(bodyText as string)
+                end if
+            end try
+        end if"""
 
 # Injected when fetch_body=False
 _BODY_SKIP = '        set msgBody to ""'
@@ -245,6 +284,7 @@ class MailReader:
         max_messages_per_mailbox: int = DEFAULT_MAX_MESSAGES,
         fetch_body: bool = False,
         fetch_recipients: bool = False,
+        fetch_raw_source: bool = False,
         skip_mailboxes: Optional[set[str]] = None,
     ) -> list[MailMessage]:
         """Fetch messages received in the last *days_back* days.
@@ -257,6 +297,13 @@ class MailReader:
                         Default False. Enable with PA_MAIL_FETCH_BODY=true.
             fetch_recipients: read To-header per message (slow IPC call).
                               Default False.
+            fetch_raw_source: when True (and fetch_body=True) pull the full
+                RFC822 ``source of msg`` instead of just rendered plain
+                text.  ``_convert`` then extracts the ``text/html`` MIME
+                part and converts to Markdown so bullet lists / bold /
+                links survive into the vault.  Trade-off: 5-100x larger
+                payload per message → slower sync.  Enable with
+                ``PA_MAIL_FETCH_RAW_SOURCE=true``.
             skip_mailboxes: extra folder names to skip (merged with defaults).
         """
         skip = _SKIP_MAILBOXES | (skip_mailboxes or set())
@@ -291,7 +338,8 @@ class MailReader:
             f"[mail] Fetching {len(wanted)} mailboxes  "
             f"({days_back}d back, max {max_messages_per_mailbox} msgs each, "
             f"body={'on' if fetch_body else 'off'}, "
-            f"recipients={'on' if fetch_recipients else 'off'})"
+            f"recipients={'on' if fetch_recipients else 'off'}, "
+            f"raw_source={'on' if fetch_raw_source else 'off'})"
         )
 
         # Step 3 — fetch per mailbox
@@ -306,6 +354,7 @@ class MailReader:
                 max_messages=max_messages_per_mailbox,
                 fetch_body=fetch_body,
                 fetch_recipients=fetch_recipients,
+                fetch_raw_source=fetch_raw_source,
             )
             for msg in msgs:
                 if msg.message_id and msg.message_id in seen_ids:
@@ -347,8 +396,17 @@ class MailReader:
         max_messages: int,
         fetch_body: bool,
         fetch_recipients: bool,
+        fetch_raw_source: bool = False,
     ) -> list[MailMessage]:
         """Fetch messages from a single mailbox with per-mailbox timeout."""
+        # Pick the body-extraction snippet: skip / plain content / raw RFC822.
+        if not fetch_body:
+            body_block = _BODY_SKIP
+        elif fetch_raw_source:
+            body_block = _BODY_BLOCK_RAW
+        else:
+            body_block = _BODY_BLOCK
+        self._fetch_raw_source = fetch_raw_source  # used by _convert
         script = _FETCH_MBOX_SCRIPT.format(
             days_back=days_back,
             max_messages=max_messages,
@@ -357,7 +415,7 @@ class MailReader:
             recipients_block=_RECIPIENTS_BLOCK
             if fetch_recipients
             else _RECIPIENTS_SKIP,
-            body_block=_BODY_BLOCK if fetch_body else _BODY_SKIP,
+            body_block=body_block,
         )
 
         try:
@@ -437,6 +495,33 @@ class MailReader:
             for a in item.get("attachment_names", "").split("|")
             if a.strip()
         ]
+
+        # Body extraction.
+        #
+        # When PA_MAIL_FETCH_RAW_SOURCE=true the AppleScript layer dumped
+        # the full RFC822 ``source of msg`` into ``body``. Detect that by
+        # looking for typical headers, then run it through the MIME parser
+        # + HTML→Markdown converter so the vault keeps bullet lists, bold,
+        # italics, links — and the WebUI ``_emailToHtml`` renders them.
+        #
+        # Heuristic for "this is raw RFC822":
+        #   * starts with one of {From:, Return-Path:, Received:, MIME-Version:,
+        #     Content-Type:, Message-ID:, Subject:} (case-insensitive,
+        #     ignoring any leading whitespace)
+        #
+        # The heuristic, not the ``fetch_raw_source`` flag, decides — that
+        # way ``_convert`` is testable without instance state and stale
+        # legacy items still come through correctly.
+        raw_body = safe_str(item.get("body"), max_len=None)
+        if raw_body and _looks_like_rfc822(raw_body):
+            try:
+                from personal_assistant.utils.email_html import source_to_markdown
+                converted = source_to_markdown(raw_body)
+                if converted.strip():
+                    raw_body = converted
+            except Exception as exc:  # noqa: BLE001 — never block sync
+                logger.warning(f"[mail] RFC822 conversion failed: {exc}")
+
         return MailMessage(
             message_id=item.get("id", ""),
             subject=subject,
@@ -446,7 +531,7 @@ class MailReader:
             cc=cc,
             date=_dt(item.get("date", "")),
             mailbox=safe_str(item.get("mailbox")),
-            body=safe_str(item.get("body"), max_len=None),
+            body=raw_body,
             has_attachments=item.get("has_attachments") in (True, "true"),
             attachments=attachments,
             thread_id=compute_thread_id(subject),

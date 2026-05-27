@@ -451,6 +451,7 @@ def sync_mail(ctx, days_back, overwrite):
             max_messages_per_mailbox=settings.mail_max_messages,
             fetch_body=settings.mail_fetch_body,
             fetch_recipients=settings.mail_fetch_recipients,
+            fetch_raw_source=settings.mail_fetch_raw_source,
         )
     contacts = reader.extract_contacts(messages)
 
@@ -539,6 +540,7 @@ def sync_all(ctx, overwrite, sources):
                     max_messages_per_mailbox=settings.mail_max_messages,
                     fetch_body=settings.mail_fetch_body,
                     fetch_recipients=settings.mail_fetch_recipients,
+                    fetch_raw_source=settings.mail_fetch_raw_source,
                 )
             all_contacts.append(mail_reader.extract_contacts(messages))
             with console.status("Grouping threads…"):

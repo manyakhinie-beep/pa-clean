@@ -704,6 +704,7 @@ def _run_sync_mail(vault_path: Path) -> dict:
         max_messages_per_mailbox=settings.mail_max_messages,
         fetch_body=settings.mail_fetch_body,
         fetch_recipients=settings.mail_fetch_recipients,
+        fetch_raw_source=settings.mail_fetch_raw_source,
     )
     contacts = reader.extract_contacts(messages)
 
