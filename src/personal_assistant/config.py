@@ -235,6 +235,13 @@ class Settings:
         # to True so the WebUI reply flow works out of the box; users with
         # huge inboxes can disable via PA_MAIL_FETCH_RECIPIENTS=false.
         self.mail_fetch_recipients: bool = _env_bool("MAIL_FETCH_RECIPIENTS", True)
+        # Whether the Inbox Срочно/Важно filters auto-flag items based on
+        # tag-set membership (``urgency:critical`` / ``срочно`` / ``важно``
+        # / ``category:finance`` / ...).  When False (default), filters are
+        # driven **only** by user-defined GTD-правила + структурные правила
+        # — matches the user's spec «кнопки управляются только через
+        # Правила → GTD-правила».  Set True to restore legacy behaviour.
+        self.inbox_tag_urgency_enabled: bool = _env_bool("INBOX_TAG_URGENCY_ENABLED", False)
         # Pull the full RFC822 ``source of msg`` instead of just rendered
         # plain text — this lets us extract the HTML MIME part and convert
         # it to Markdown so bullet lists / bold / links survive in the

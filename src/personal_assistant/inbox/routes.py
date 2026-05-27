@@ -273,8 +273,28 @@ def _doc_to_item(doc, item_state: Optional[dict] = None) -> dict:
     extra_tags = list(st.get("extra_tags", []))
     tags_raw = vault_tags + [t for t in extra_tags if t not in vault_tags]
 
-    is_urgent = any(t.lower() in _TAG_URGENT for t in tags_raw)
-    is_important = any(t.lower() in _TAG_IMPORT for t in tags_raw)
+    # The Срочно / Важно filters are driven **only** by Правила → GTD-правила
+    # (gtd_rules.json + rules.json) — see ``inbox_rules_service``.  Auto-set
+    # by frontmatter tags is disabled by default because the classifier
+    # tags (``urgency:critical`` etc.) and ad-hoc strings like ``срочно``
+    # used to silently mark items as urgent without the user touching
+    # rules — that bypassed the «only через Правила» contract the user
+    # pinned down.  Set ``PA_INBOX_TAG_URGENCY_ENABLED=true`` to restore
+    # the legacy union-with-tags behaviour.
+    try:
+        from personal_assistant.config import settings as _cfg
+        _tag_urgency_enabled = bool(getattr(_cfg, "inbox_tag_urgency_enabled", False))
+    except Exception:
+        _tag_urgency_enabled = False
+    if _tag_urgency_enabled:
+        is_urgent = any(t.lower() in _TAG_URGENT for t in tags_raw)
+        is_important = any(t.lower() in _TAG_IMPORT for t in tags_raw)
+    else:
+        is_urgent = False
+        is_important = False
+
+    # ``meeting`` detection stays tag-based — it's a content-type signal,
+    # not a priority one, and doesn't affect the Срочно/Важно filters.
     item_type = "meeting" if doc.section == "calendar" or any(
         t.lower() in _TAG_MEETING for t in tags_raw
     ) else "email"
