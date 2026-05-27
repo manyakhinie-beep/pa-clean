@@ -143,7 +143,9 @@ function renderList() {
     container.innerHTML = _renderThreadGroups(visible);
     _wireThreadGroupHandlers(container);
   } else {
-    container.innerHTML = visible.map(item => _renderItemHtml(item, false)).join('');
+    // Flat view — bucket by time (Сегодня / Вчера / На этой неделе / Раньше)
+    // so the reader has the same mental anchor Apple Mail and Superhuman use.
+    container.innerHTML = _renderTimeBuckets(visible);
     container.querySelectorAll('.ib-item').forEach(el => {
       el.addEventListener('click', () => {
         const idx = parseInt(el.dataset.idx, 10);
@@ -151,6 +153,53 @@ function renderList() {
       });
     });
   }
+}
+
+// ---------------------------------------------------------------------------
+// Time-bucket grouping for the flat view
+// ---------------------------------------------------------------------------
+function _timeBucket(dateStr) {
+  if (!dateStr) return 'older';
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return 'older';
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diffDays = Math.floor((today - dDate) / 86_400_000);
+  if (diffDays <= 0)  return 'today';
+  if (diffDays === 1) return 'yesterday';
+  if (diffDays <= 7)  return 'week';
+  if (diffDays <= 30) return 'month';
+  return 'older';
+}
+
+const _BUCKET_LABELS = {
+  today:     'Сегодня',
+  yesterday: 'Вчера',
+  week:      'На этой неделе',
+  month:     'Ранее в этом месяце',
+  older:     'Старше',
+};
+const _BUCKET_ORDER = ['today', 'yesterday', 'week', 'month', 'older'];
+
+function _renderTimeBuckets(visible) {
+  const buckets = new Map();
+  visible.forEach(item => {
+    const key = _timeBucket(item.date);
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(item);
+  });
+  return _BUCKET_ORDER
+    .filter(b => buckets.has(b))
+    .map(b => {
+      const list = buckets.get(b);
+      return `<div class="ib-bucket-header">
+                <span class="ib-bucket-header__label">${_BUCKET_LABELS[b]}</span>
+                <span class="ib-bucket-header__count">${list.length}</span>
+              </div>` +
+             list.map(item => _renderItemHtml(item, false)).join('');
+    })
+    .join('');
 }
 
 /** Render a single inbox row.  Used for both flat lists and inside expanded
@@ -203,6 +252,16 @@ function _renderItemHtml(item, inThread = false) {
     ? '<span class="ib-ai-badge" title="Классифицировано ИИ">🤖</span>'
     : '';
 
+  // Two-line snippet of the email body — gives reading-list comfort like
+  // Apple Mail / Superhuman, so the user can skim without opening each item.
+  // Skip for meetings (their preview is usually noisy markdown table).
+  const previewText = item.type === 'meeting'
+    ? ''
+    : (item.body_preview || item.preview || '').trim();
+  const previewHtml = previewText
+    ? `<div class="ib-item-preview">${_esc(previewText.slice(0, 200))}</div>`
+    : '';
+
   return `
   <div class="ib-item${active}${read}${urgent}${indent}" data-idx="${i}" data-id="${_esc(item.id)}">
     ${prioBar}
@@ -220,6 +279,7 @@ function _renderItemHtml(item, inThread = false) {
         <span class="ib-item-time">${_esc(item.time_label)}</span>
       </div>
       <div class="ib-item-subject">${typeIcon}${_esc(item.subject)}</div>
+      ${previewHtml}
       ${tags ? `<div class="ib-item-tags">${tags}</div>` : ''}
     </div>
   </div>`;
@@ -405,11 +465,11 @@ function renderDetail() {
       ${tags ? `<div class="ib-detail-tags">${tags}</div>` : ''}
       <h2 class="ib-detail-subject">${_esc(item.subject)}</h2>
       <div class="ib-detail-meta">
-        <div class="ib-avatar ib-avatar--sm" style="background:${item.sender_color}">${_esc(item.sender_initials)}</div>
+        <div class="ib-avatar ib-avatar--lg" style="background:${item.sender_color}">${_esc(item.sender_initials)}</div>
         <div class="ib-detail-meta-info">
           <span class="ib-detail-sender">${_esc(item.sender_name)}</span>
-          ${item.sender_role ? `<span class="ib-detail-role"> · ${_esc(item.sender_role)}</span>` : ''}
-          <span class="ib-detail-time"> · ${_esc(item.time_label)} MSK ${threadNote}</span>
+          ${item.sender_role ? `<span class="ib-detail-role">· ${_esc(item.sender_role)}</span>` : ''}
+          <span class="ib-detail-time">· ${_esc(item.time_label)} ${threadNote}</span>
         </div>
       </div>
     </div>
