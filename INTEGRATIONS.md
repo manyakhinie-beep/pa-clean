@@ -33,15 +33,35 @@
   потребоваться **Full Disk Access**. Проверка/сброс — `tccutil`.
 - **Декодирование тела.** RTF/HTML тела писем нормализуются при чтении (см.
   scenario `tests/scenarios/test_mail_body_scenarios.py`).
+- **Получатели To/CC.** Флаг `mail_fetch_recipients` (по умолчанию **`True`**,
+  `PA_MAIL_FETCH_RECIPIENTS`). При синхронизации делается ~5 доп. AppleScript-вызовов
+  на каждое письмо чтобы заполнить `recipients:` и `cc:` во frontmatter. Это
+  критично для Reply All: иначе при ответе из чата в Mail compose не подтянутся
+  CC треда. Можно выключить на огромных inbox'ах (`PA_MAIL_FETCH_RECIPIENTS=false`).
+- **Reply All в Mail.** Кнопка `↩️ Ответ` в чате вызывает
+  `reply origMsg with reply to all opening window true` —
+  Mail.app сам подтягивает To/CC из своей базы. Бэкенд **дедуплицирует**
+  явные `to_recipients`/`cc_recipients` против уже-заполненных (`ignoring case`)
+  и **не перезаписывает** quoted history: текст из чата вставляется
+  выше блока «On … wrote: > …». См. тесты в
+  `tests/unit/test_draft_reply_dedup.py` (24 кейса).
+- **Делегирование.** Кнопка `🤝 Делегировать` в Inbox-ассистенте берёт
+  список коллег из `tool_prompts.json` (Rules → Инструменты), генерирует
+  через MLX короткое вводное письмо (4-7 строк) и открывает compose-окно
+  с заполненными To / Subject / Body. См. `RULES.md` → «Промпт делегирования».
 - **Авточерновики.** Флаг `mail_auto_draft`: когда вызов не задаёт явно, черновик
   либо тихо сохраняется в «Черновики», либо открывается окно компоновки
   (`resolve_save_to_drafts`).
+- **Lenient YAML.** `services/tool_prompts.parse_lenient` восстанавливает
+  legacy frontmatter с run-on YAML (артефакт прошлого Jinja `trim_blocks` бага):
+  ``location: "X"tags: [почта]`` теперь корректно разбирается. Применяется
+  в `/mail/message-meta`, `_resolve_reply_message_id`, `fetch_upcoming_events`,
+  `_scan_upcoming_events`, BM25-индексе и draft-context.
 - **Безопасность тестов.** При `e2e_test_mode=true` реальные черновики НЕ
   создаются — `save_draft_reply`/`save_draft_mail` возвращают симуляцию.
   Никогда не отправляйте реальные письма из тестов.
-- **Legacy Outlook.** В репозитории остаётся читатель локальной БД Outlook
-  (`readers/outlook_sqlite/*`, `readers/outlook_reader.py`) при заявленном
-  переходе на Apple Mail. Открытый пункт (P7): удалить или спрятать за флагом.
+- **Outlook (исторически).** Bundle Outlook-reader удалён (P7 закрыт).
+  Единственная поддерживаемая точка чтения — Apple Mail через AppleScript.
 
 ## Apple Calendar
 

@@ -1,4 +1,4 @@
-# Карта функционала pa-merge (Фаза 2 аудита)
+# Карта функционала pa-clean (Фаза 2 аудита + актуализация)
 
 Составлено по фактическому коду (2026-05-25). Перечислены все точки входа
 (CLI, HTTP API, WebUI), сопоставлены с модулями и покрытием тестами, проставлен
@@ -108,10 +108,44 @@
 
 ---
 
-## 4. Рекомендованный порядок добивки
+## 4. Изменения после Q2 2026 (live-фиксы и новые фичи)
 
-1. Документация (Фаза 5): README/ARCHITECTURE/RULES/TESTING/INTEGRATIONS.
-2. Покрытие ≥80% (P14) + scenario-прогон на Mac (P9).
-3. Гигиена (P7, P8): legacy Outlook, мусор, дубли SCSS.
-4. `mypy` → блокирующий (P13).
-5. Фаза 6 — миграция в `pa-clean` по этапам, затем Фаза 7 (приёмка).
+После закрытия фаз 1-7 в pa-clean приехали следующие фичи. Все они под
+покрытием тестами; F-айдишники продолжают карту функционала из §2.
+
+| ID  | Область | Модуль | Точки входа | Тесты | Статус |
+|-----|---------|--------|-------------|-------|--------|
+| F17 | Inbox-фильтры по правилам | `services/inbox_rules_service.py` | inbox list pipeline | `test_inbox_rules_service.py` (27) | ✅ |
+| F18 | Thread grouping «Беседы» | `webui/frontend/js/inbox.js` (`_groupVisibleByThread`, `_renderThreadGroups`) | UI toggle | визуальный + JS-логика smoke | ✅ |
+| F19 | Mark-all-read batch | `inbox/routes.py::mark_read_batch` | `POST /api/v1/inbox/mark-read-batch` | `test_mark_read_batch.py` (7) | ✅ |
+| F20 | Time-bucket секции Inbox | `webui/frontend/js/inbox.js` (`_timeBucket`, `_renderTimeBuckets`) | плоский режим Inbox | node-harness (11 кейсов + структура) | ✅ |
+| F21 | Inbox quick-search | `inbox.js` (`_filteredItems`, `_normalize`) | `🔍`/`/` поле | node-harness AND/case/NFD | ✅ |
+| F22 | Делегирование (intro generator) | `services/delegate_service.py`, `inbox/routes.py` | `🤝 Делегировать`, `D`, `POST /api/v1/inbox/{id}/delegate-suggest`, `GET .../delegate-contacts` | `test_delegate_service.py` (23) | ✅ |
+| F23 | Reply-all + dedup + history preserve | `mlx_server/chat_routes._build_save_draft_mail_script` | `↩️ Ответ` в чате | `test_draft_reply_dedup.py` (24) | ✅ 🍎 |
+| F24 | Lenient YAML frontmatter | `utils/frontmatter.parse_lenient` | все читатели md | `test_resolve_reply_message_id.py` (8) + покрытие через 4 callsites | ✅ |
+| F25 | Wall-clock display | `today/routes.py`, `calendar/routes.py`, `daily_brief_service` | Today / upcoming / brief | regression в `test_daily_brief.py` | ✅ |
+| F26 | Search → правильный chat-контекст | `webui/frontend/js/search.js` (`_runTool`) + `webui/routes.py` `/search/docs` | UI кнопки результатов | визуальная регрессия + backend smoke | ✅ |
+| F27 | Polished Inbox visuals (Apple Mail × Superhuman) | `webui/frontend/styles/components/_inbox.scss` | весь Inbox | визуал | ✅ |
+
+### Открытые P-айтемы
+
+- **P14 (покрытие).** Baseline 64.9% зафиксирован после введения F22-F27
+  поднялся до **~67%** (новые сервисы покрыты хорошо). Stretch goal 80%
+  упирается в endpoint'ы под `e2e_test_mode`-guard'ом — без MLX/AppleScript
+  на CI не покроем.
+- **Performance baseline для MLX.** Открыто из §1.4 INTEGRATIONS.md — нужно
+  замерить latency draft/summarize/delegate на M3 Pro / M4 Pro и зафиксировать
+  в `docs/PERFORMANCE.md`.
+
+---
+
+## 5. Рекомендованный порядок добивки (актуализировано)
+
+1. Реализовать quick wins из [`docs/AI_TOOLS_LANDSCAPE_2026.md`](AI_TOOLS_LANDSCAPE_2026.md)
+   §5.1 — S1-1 (noise filter), S1-2 (auto-summary в Inbox-list),
+   S1-3 (Cmd+K Ask AI), S1-4 (background auto-drafts).
+2. Style learning (S2-1) по исходящим письмам — даёт «звучание пользователя»
+   в драфтах и делегациях.
+3. Task → Calendar autoscheduling (S3-1) — новая категория «AI calendar».
+4. Performance baseline для MLX.
+5. Покрытие на уровне 70% (с учётом F17-F27 это уже достижимо).

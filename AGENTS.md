@@ -1,4 +1,4 @@
-# AGENTS.md — pa-merge
+# AGENTS.md — pa-clean
 
 > Файл для AI-ассистентов, работающих с кодовой базой. Проект, документация и комментарии в коде преимущественно на русском языке.
 
@@ -6,7 +6,7 @@
 
 ## Обзор проекта
 
-**pa-merge** — оффлайн-персональный ассистент для macOS. Синхронизирует данные из Apple Calendar и Apple Mail в локальное Markdown-хранилище (vault), а затем отвечает на вопросы пользователя через локальный MLX-инференс (Apple Silicon). Данные не покидают компьютер.
+**pa-clean** — оффлайн-персональный ассистент для macOS. Синхронизирует данные из Apple Calendar и Apple Mail в локальное Markdown-хранилище (vault), а затем отвечает на вопросы пользователя через локальный MLX-инференс (Apple Silicon). Данные не покидают компьютер.
 
 Основные возможности:
 - Синхронизация Calendar.app и Mail.app через AppleScript → vault из `.md`-файлов с YAML frontmatter.
@@ -46,7 +46,7 @@
 ## Структура проекта
 
 ```
-pa-merge/
+pa-clean/
 ├── src/personal_assistant/          # Основной Python-пакет
 │   ├── config.py                    # Настройки из .env (класс Settings)
 │   ├── models.py                    # Pydantic-модели: Contact, CalendarEvent, MailMessage

@@ -1,11 +1,20 @@
-# TESTING — pa-merge
+# TESTING — pa-clean
 
 ## Установка
 
 ```bash
-cd /path/to/pa-merge          # ВСЕГДА из корня репозитория
-uv sync                        # ставит runtime + dev-группу (pytest, ruff, mypy, pytest-cov)
-uv sync --extra vector         # доп.: гибридный векторный поиск (torch/sentence-transformers)
+cd /path/to/pa-clean             # ВСЕГДА из корня репозитория
+
+# Для тестов нужна dev-группа (pytest, ruff, mypy, locust, pytest-timeout).
+# С [tool.uv] default-groups = [] плоский `uv sync` ставит только runtime,
+# поэтому dev-группу запрашиваем явно:
+uv sync --group dev
+
+uv sync --extra vector --group dev   # доп.: гибридный векторный поиск
+                                     # (torch / sentence-transformers)
+
+# Coverage опционально (отдельный extra-group из-за блокировок прокси):
+uv sync --group dev --group cov
 ```
 
 Требуется macOS на Apple Silicon: `mlx-lm` имеет колёса только под darwin/arm64,

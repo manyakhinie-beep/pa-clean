@@ -9,12 +9,14 @@
 ## Документация
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — слои, потоки данных, персистентность, модель потоков MLX.
-- [RULES.md](RULES.md) — вкладка «Правила» и все настройки ИИ (типы, диапазоны, API).
+- [RULES.md](RULES.md) — вкладка «Правила»: ИИ-настройки, промпты, GTD/делегирование.
 - [TESTING.md](TESTING.md) — запуск тестов, маркеры, покрытие, CI.
 - [INTEGRATIONS.md](INTEGRATIONS.md) — MLX, Apple Mail, Apple Calendar: права доступа и ограничения.
+- [docs/USER_GUIDE.md](docs/USER_GUIDE.md) — пользовательский гайд по WebUI и кейсам.
 - [docs/FUNCTIONALITY_MAP.md](docs/FUNCTIONALITY_MAP.md) — карта функционала и реестр проблем.
-- [docs/REMOTE_SETUP.md](docs/REMOTE_SETUP.md) — установка на удалённой / корпоративной машине (Rosetta, прокси-блоки).
+- [docs/REMOTE_SETUP.md](docs/REMOTE_SETUP.md) — установка на удалённой / корпоративной машине (Rosetta, прокси-блоки, `make.sh`, `--no-dev`).
 - [docs/UAT.md](docs/UAT.md) — ручной чеклист пользовательской приёмки.
+- [docs/AI_TOOLS_LANDSCAPE_2026.md](docs/AI_TOOLS_LANDSCAPE_2026.md) — анализ рынка AI-инструментов 2026 + план доработок на 1-3 месяца.
 
 ---
 
@@ -56,29 +58,55 @@
 
 ## Быстрый старт
 
+**Один скрипт — рекомендуемый путь (`./make.sh`):**
+
 ```bash
-# 1. Клонировать
 git clone https://github.com/your-org/pa-clean
 cd pa-clean
+cp .env.example .env       # отредактировать перед первым запуском
+./make.sh                  # uv sync --no-dev → webui build → pa serve
+```
 
-# 2. Полная сборка: deps + WebUI + создать .env
+`make.sh` ставит **только** runtime-зависимости (без pytest/ruff/mypy —
+быстрее и обходит корпоративные прокси, блокирующие dev-пакеты),
+собирает WebUI и поднимает сервер на http://127.0.0.1:8000.
+
+**Флаги `make.sh`:**
+
+| Флаг | Назначение |
+|---|---|
+| (без флагов) | install (--no-dev) + WebUI build + `pa serve` |
+| `--no-serve` | только установить и собрать, без запуска (CI / прод-машина) |
+| `--skip-webui` | пропустить `npm run build` (использовать `webui/dist/` из git) |
+| `--dev` | включить группу `dev` (pytest, ruff, mypy, locust, …) — если прокси разрешает |
+| `--help` | справка |
+
+**Пошагово вручную**, если нужен контроль:
+
+```bash
+git clone https://github.com/your-org/pa-clean
+cd pa-clean
 cp .env.example .env
-uv sync                                          # включает dev: ruff, mypy, pytest-cov
-# или для прод-сборки без dev-инструментов (без coverage, ruff, mypy, pytest):
-# uv sync --no-dev
+
+# Production: только runtime (рекомендуется на рабочих машинах)
+uv sync --no-dev
+
+# Developer: runtime + pytest/ruff/mypy/locust
+# uv sync --group dev
+
 (cd webui && npm install && npm run build)
-
-# 3. Настроить .env (обязательно: vault-путь и MLX-модель)
-$EDITOR .env
-
-# 4. Проверить конфигурацию
-uv run pa check
-
-# 5. Запустить
-uv run pa serve
+$EDITOR .env                            # vault path + MLX-модель
+uv run pa check                         # smoke-проверка окружения
+uv run pa serve                         # запустить WebUI
 ```
 
 WebUI доступен на **http://127.0.0.1:8000**.
+
+> **Важно про `uv run`.** `pyproject.toml` содержит
+> `[tool.uv] default-groups = []` — `uv run pa <cmd>` синхронизирует
+> только runtime, не пытается ставить dev-группу при каждом запуске.
+> Это нужно для корпоративных машин, где прокси блокирует свежие
+> версии `coverage`, `mypy` и т.п.
 
 ---
 
@@ -164,12 +192,37 @@ uv run pa serve --preload-model
 
 API-эндпоинт: `GET /api/v1/today` — возвращает `greeting`, `bullets`, `events`, `attention`, `suggestions`, `updated_at`, `next_update`.
 
+### Вкладка «Inbox»
+
+Полноценный почтовый клиент в духе Outlook / Apple Mail / Superhuman:
+
+**Структура (3 колонки):**
+1. **Левая** — список писем + встреч.
+2. **Центр** — детальная карточка выбранного элемента (тема, отправитель, тело, цитаты).
+3. **Правая** — панель «Ассистент»: действия (Draft / Делегировать / Суммаризировать / Слот / В проект / Прочитано / Архив / Snooze) + теги + проект + следующие шаги.
+
+**Группировка «Беседы» (по умолчанию):** письма с одинаковым `thread_id` сворачиваются под одним заголовком в стиле Outlook «Беседы». Шеврон ▾/▸, счётчик `[N]`, дедуп-список отправителей, агрегированные значки 🔴 / 🔔. Тоггл `🧵 Беседы` ↔ `☰ Список` переключает плоский режим.
+
+**Временные секции (плоский режим):** «Сегодня / Вчера / На этой неделе / Ранее в этом месяце / Старше» — sticky-заголовки с blur-фоном, как в Apple Mail.
+
+**Фильтры в шапке:** Все · 🔴 Срочно · 🟡 Важно · 🔔 Ответить · Mail · События · ↓ Дата/Приоритет.
+
+**Полоса поиска (🔍):** клиент-side фильтр по ФИО / email / теме / preview / тегам. Многотокенный AND-поиск, case-insensitive, диакритика (ё↔е). Глобальный shortcut `/` фокусирует поле.
+
+**Кнопка «✓ Прочитать все»:** bulk-операция через `POST /api/v1/inbox/mark-read-batch` — отмечает все видимые непрочитанные.
+
+**Применение GTD-правил:** правила из `data/rules.json` (структурные) и `data/gtd_rules.json` (простые keyword → quadrant) применяются к каждому элементу при загрузке списка. Quadrant Q1 → `is_urgent + is_important`, Q2 → `is_important`, Q3 → `is_urgent`; `action_type=EXECUTE` или тег `ответить`/`followup` → `followup_needed`.
+
+**Горячие клавиши:** `J/K` навигация, `R` Draft, `D` Делегировать, `U` Суммаризировать, `C` Создать слот, `P` В проект, `E` Архив, `S` Snooze, `/` Поиск.
+
 ### Функции чата
 
 - **@-упоминания** — прикрепить любой .md-файл из vault прямо в контекст
 - **Тред-контекст** — кнопки «Суммаризировать» / «Черновик ответа» в vault передают цепочку писем в модель
 - **Стриминг** — ответ появляется токен за токеном
-- **Черновик в Mail** — кнопка «Открыть в Mail» создаёт compose-окно с `In-Reply-To` исходного письма; автосохранение через Cmd+S
+- **Reply All в Mail** — `↩️ Ответ` под ответом ассистента: AppleScript `reply with reply to all opening window true` → Mail.app сам подтягивает To/CC и цитированную историю треда; наш бэкенд дедуплицирует адресатов (`ignoring case`) и **не** перезаписывает quoted history (prepend bodyContent выше цитаты).
+- **`✉️ Черновик`** — для свободных ответов без треда: создаёт новое исходящее с темой из первой строки бабла.
+- **`✏️ Изменить`** — открывает inline-панель редактирования (To/CC/Subject/Body) для тонкой настройки перед отправкой.
 
 ### Вкладка «Правила»
 
@@ -572,6 +625,40 @@ llm_classify:
 - `enabled: false` в yaml → endpoint возвращает `status: disabled`
 
 **Тесты:** 42 unit (`test_llm_classify_service.py`, LC01–LC42) + 18 E2E/integration (`TestClassifyLLMStage8`, `TestClassifyDocConfidence`)
+
+---
+
+### Делегирование письма (Stage 9)
+
+Действие **Inbox → Ассистент → 🤝 Делегировать** (клавиша `D`) формирует
+короткую вводную для пересылки письма коллеге.
+
+**Конфигурация (Rules → Инструменты):**
+- `delegate_system` — системный промпт. По умолчанию 4-7-строчное вводное
+  письмо в деловом тоне на русском.
+- `delegate_contacts` — таблица {ФИО, Email, Роль, Заметка} в
+  `vault/.tool_prompts.json`. Дубликаты по email отбрасываются.
+
+**UX-flow:**
+
+1. Открыть письмо в Inbox → правая панель «Ассистент» → 🤝 Делегировать (или `D`).
+2. В модалке выбрать коллегу (radio), опционально добавить заметку.
+3. `👁 Предпросмотр` — показывает текст без открытия Mail.
+4. `✉️ Открыть в Mail` — открывает compose-окно с заполненными
+   To / Subject / Body.
+
+**Endpoints:**
+
+| Метод | Путь | Описание |
+|---|---|---|
+| GET  | `/api/v1/inbox/delegate-contacts` | Список настроенных коллег для picker'а |
+| POST | `/api/v1/inbox/{item_id}/delegate-suggest` | Сгенерировать intro для делегирования |
+
+Тело запроса: `{target_email, note}`. Ответ:
+`{intro, subject, contact, mlx_used, draft_payload}` —
+`draft_payload` готов для POST в `/api/chat/save-draft-mail`.
+
+Подробности — в [RULES.md](RULES.md) → «Промпт делегирования и список сотрудников».
 
 ---
 
@@ -1071,5 +1158,5 @@ uv run pytest tests/unit/ --tb=short
 | [`docs/FUNCTIONALITY_MAP.md`](docs/FUNCTIONALITY_MAP.md) | Карта функционала и реестр проблем (Фаза 2 аудита) |
 | [`docs/SCENARIO_TEST_PLAN.md`](docs/SCENARIO_TEST_PLAN.md) | План сценарных тестов |
 | [`docs/AUDIT_PLAN.md`](docs/AUDIT_PLAN.md) | План аудита проекта (фазы 1–7) |
-| [`docs/MIGRATION_PLAN.md`](docs/MIGRATION_PLAN.md) | План миграции pa-merge → pa-clean (Фаза 6) |
+| [`docs/MIGRATION_PLAN.md`](docs/MIGRATION_PLAN.md) | План миграции pa-merge → pa-clean (Фаза 6, исторический документ) |
 | [`docs/ai-email-calendar-research.md`](docs/ai-email-calendar-research.md) | Исследование AI-обработки почты и календаря |

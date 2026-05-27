@@ -1,4 +1,4 @@
-# ARCHITECTURE — pa-merge
+# ARCHITECTURE — pa-clean
 
 Оффлайн персональный ассистент для macOS. Синхронизирует Apple Calendar и Apple
 Mail в локальное Markdown-хранилище (vault), индексирует его и отвечает на
