@@ -34,6 +34,70 @@ def test_default_delegate_system_is_nonempty():
     assert "4-7" in DEFAULT_DELEGATE_SYSTEM
 
 
+def test_default_delegate_extracts_who_to_whom_what_when():
+    """All three prompts (summarize/draft/delegate) must lead with the
+    explicit ``КТО / КОМУ / ЧТО / КОГДА`` extraction block — that's the
+    contract the user pinned down in the prompt spec."""
+    from personal_assistant.services.tool_prompts import (
+        DEFAULT_DELEGATE_SYSTEM,
+        DEFAULT_DRAFT_SYSTEM,
+        DEFAULT_SUMMARIZE_SYSTEM,
+    )
+    for name, prompt in [
+        ("summarize", DEFAULT_SUMMARIZE_SYSTEM),
+        ("draft",     DEFAULT_DRAFT_SYSTEM),
+        ("delegate",  DEFAULT_DELEGATE_SYSTEM),
+    ]:
+        assert "КТО"   in prompt, f"{name}: missing KTO marker"
+        assert "КОМУ"  in prompt, f"{name}: missing KOMU marker"
+        assert "ЧТО"   in prompt, f"{name}: missing CHTO marker"
+        assert "КОГДА" in prompt, f"{name}: missing KOGDA marker"
+
+
+def test_all_prompts_prioritise_user_and_last_message():
+    """Each prompt must call out the priority on the assistant's user
+    (the inbox owner) and on the **last** message of the thread."""
+    from personal_assistant.services.tool_prompts import (
+        DEFAULT_DELEGATE_SYSTEM,
+        DEFAULT_DRAFT_SYSTEM,
+        DEFAULT_SUMMARIZE_SYSTEM,
+    )
+    for name, prompt in [
+        ("summarize", DEFAULT_SUMMARIZE_SYSTEM),
+        ("draft",     DEFAULT_DRAFT_SYSTEM),
+        ("delegate",  DEFAULT_DELEGATE_SYSTEM),
+    ]:
+        low = prompt.lower()
+        assert "приоритет" in low, f"{name}: must declare priority"
+        assert "последне"  in low, f"{name}: must mention 'последнее' message"
+        assert "пользовател" in low or "ты" in low, \
+            f"{name}: must reference the assistant's user"
+
+
+def test_summarize_has_user_tasks_section():
+    """Summarize must split tasks for ``Тебе`` vs ``Другим`` — that's the
+    user's headline requirement for the summarize skill."""
+    from personal_assistant.services.tool_prompts import DEFAULT_SUMMARIZE_SYSTEM
+    assert "Тебе:" in DEFAULT_SUMMARIZE_SYSTEM
+    assert "Другим:" in DEFAULT_SUMMARIZE_SYSTEM
+
+
+def test_draft_can_suggest_delegation():
+    """Draft prompt must allow proposing a delegation when the task is
+    outside the user's scope — per the user's spec the draft skill bridges
+    reply ↔ delegate."""
+    from personal_assistant.services.tool_prompts import DEFAULT_DRAFT_SYSTEM
+    assert "делегир" in DEFAULT_DRAFT_SYSTEM.lower()
+
+
+def test_delegate_output_is_only_email_body():
+    """Delegate prompt must clamp output to the email body (no subject,
+    no `Кому` line) — the rest is added by the AppleScript layer."""
+    from personal_assistant.services.tool_prompts import DEFAULT_DELEGATE_SYSTEM
+    assert "тело письма" in DEFAULT_DELEGATE_SYSTEM.lower()
+    assert "без темы" in DEFAULT_DELEGATE_SYSTEM.lower()
+
+
 def test_tool_prompts_effective_delegate_uses_default_when_empty():
     from personal_assistant.services.tool_prompts import (
         DEFAULT_DELEGATE_SYSTEM,
