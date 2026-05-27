@@ -137,6 +137,16 @@ ignore = ["E501"]
 environments = [
     "sys_platform == 'darwin' and platform_machine == 'arm64'",
 ]
+# Make `uv run pa check` / `uv run pa serve` work out of the box on
+# production machines behind corporate proxies that block dev-only
+# packages (ruff/mypy/locust/etc.). uv defaults `default-groups = ["dev"]`,
+# which makes `uv run` trigger a sync of the dev group → if the proxy
+# blocks ANY dev dep, `uv run` fails before the user's command runs.
+#
+# With an empty default groups list, `uv run` syncs only runtime
+# dependencies. Developers explicitly opt into dev tools via
+# `uv sync --group dev` or `uv run --group dev pytest`.
+default-groups = []
 
 [tool.mypy]
 python_version = "3.11"

@@ -88,11 +88,27 @@ export UV_PYTHON_INSTALL_MIRROR="<your-mirror>"   # если есть mirror pyt
 - Если хотите coverage и прокси даёт доступ:
   `uv sync --group cov` отдельно.
 
-### 1.1. Минимальная prod-сборка (`--no-dev`)
+### 1.1. Минимальная prod-сборка (`--no-dev`) — рекомендуемый путь
 
 Если на машине **не нужно** запускать тесты или линтеры (только сервер
 для повседневной работы), используйте `--no-dev` — это пропускает
-установку pytest/ruff/mypy и всех других dev-инструментов:
+установку pytest/ruff/mypy и всех других dev-инструментов.
+
+**Самый короткий путь — `make.sh`:**
+
+```bash
+./make.sh                 # uv sync --no-dev + webui build + pa serve
+./make.sh --no-serve      # только установить и собрать, без запуска
+./make.sh --skip-webui    # пропустить npm-сборку (использовать webui/dist из git)
+./make.sh --dev           # включить dev-группу (pytest/ruff/…) — если прокси разрешает
+./make.sh --help          # справка
+```
+
+`make.sh` делает три шага: `uv sync --no-dev`, `(cd webui && npm install && npm run build)`,
+`exec uv run --no-sync pa serve`. Если что-то пошло не так — см. `fix_env.sh --online`
+(восстановление сломанного .venv с нуля).
+
+**Вручную пошагово**, если нужен контроль:
 
 ```bash
 # Один раз — поставить только runtime-зависимости
@@ -102,6 +118,13 @@ uv sync --no-dev
 uv run --no-sync pa check
 uv run --no-sync pa serve
 ```
+
+**Важно** (исправлено в этом коммите): `pyproject.toml` теперь содержит
+`[tool.uv] default-groups = []`. Это означает, что **`uv run pa check`
+и `uv run pa serve` работают «из коробки»** без флага `--no-sync` — uv
+больше не пытается ставить dev-группу при первом запуске. Флаг
+`--no-sync` всё ещё полезен, если хочется явно пропустить любую
+переустановку.
 
 Что попадает в `--no-dev`-venv:
 
