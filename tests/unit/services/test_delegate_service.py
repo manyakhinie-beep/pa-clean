@@ -139,6 +139,223 @@ def test_delegate_classifies_urgency_levels():
         assert level in low, f"delegate: missing urgency level '{level}'"
 
 
+# ----------------------------------------------------------------------
+# Refined delegate flow: address the colleague + manager-profile context
+# ----------------------------------------------------------------------
+
+
+def test_rule_based_addresses_colleague_by_first_name(monkeypatch):
+    """Rule-based intro must open with the colleague's first name —
+    «обращено к выбранному сотруднику»."""
+    from personal_assistant.services.delegate_service import build_suggestion
+    from personal_assistant.services.tool_prompts import DelegateContact
+    _patch_contacts(monkeypatch, [])
+    contact = DelegateContact(name="Анна Сидорова", email="anna@ex.com", role="HR")
+    s = build_suggestion(item=_item(), contact=contact, user_note="", mlx_engine=None)
+    assert s.intro.lstrip().startswith("Анна"), (
+        f"intro must address colleague by first name, got: {s.intro[:60]!r}"
+    )
+
+
+def test_rule_based_asks_to_prepare_assignments_for_manager(monkeypatch):
+    """Rule-based intro must ask the colleague to *either* prepare a list
+    of assignments for the manager *or* take the task on themselves —
+    matches the user's spec: «подготовить поручения для пользователя
+    ассистента или разобраться в вопросе»."""
+    from personal_assistant.services.delegate_service import build_suggestion
+    from personal_assistant.services.tool_prompts import DelegateContact
+    _patch_contacts(monkeypatch, [])
+    contact = DelegateContact(name="Анна", email="anna@ex.com")
+    s = build_suggestion(item=_item(), contact=contact, user_note="", mlx_engine=None)
+    low = s.intro.lower()
+    assert "поручен" in low, "intro must mention 'поручения'"
+    assert "разобрат" in low or "ответ" in low, (
+        "intro must mention 'разобраться/ответ' as the alt-path"
+    )
+
+
+def test_rule_based_uses_manager_first_name_from_profile(tmp_path, monkeypatch):
+    """When Settings → Profile holds the manager's full name, the
+    rule-based intro must mention them by first name ('для Игоря')."""
+    from personal_assistant.config import settings
+    from personal_assistant.profile import service as ps
+    from personal_assistant.profile.models import UserProfile
+    from personal_assistant.services.delegate_service import build_suggestion
+    from personal_assistant.services.tool_prompts import DelegateContact
+
+    monkeypatch.setattr(ps, "_PROFILE_PATH", tmp_path / "profile.json")
+    monkeypatch.setattr(settings, "vault_path", tmp_path)
+    ps.save_profile(UserProfile(full_name="Игорь Маниахин", user_email="igor@ex.com"))
+    _patch_contacts(monkeypatch, [])
+
+    s = build_suggestion(
+        item=_item(),
+        contact=DelegateContact(name="Анна", email="anna@ex.com"),
+        user_note="",
+        mlx_engine=None,
+    )
+    assert "Игор" in s.intro, (
+        "intro must reference the manager from Settings → Profile, "
+        f"got: {s.intro!r}"
+    )
+
+
+def test_rule_based_falls_back_to_default_when_profile_empty(monkeypatch):
+    """When the profile is empty, intro still works — falls back to
+    «для руководителя»."""
+    from personal_assistant.services.delegate_service import build_suggestion
+    from personal_assistant.services.tool_prompts import DelegateContact
+    _patch_contacts(monkeypatch, [])
+
+    # Force empty profile + empty user_email
+    import personal_assistant.services.delegate_service as ds
+    monkeypatch.setattr(ds, "_load_manager_profile",
+                        lambda: ds._ManagerProfile(full_name="", email=""))
+
+    s = build_suggestion(
+        item=_item(),
+        contact=DelegateContact(name="Анна", email="anna@ex.com"),
+        user_note="",
+        mlx_engine=None,
+    )
+    assert "руководител" in s.intro.lower()
+
+
+def test_mlx_path_injects_manager_profile_into_prompt(monkeypatch):
+    """MLX path must put the manager's name/email into the user-message
+    so the LLM knows who the colleague's assignments are FOR."""
+    from unittest.mock import MagicMock
+    from personal_assistant.services.delegate_service import build_suggestion
+    from personal_assistant.services.tool_prompts import DelegateContact
+    import personal_assistant.services.delegate_service as ds
+
+    _patch_contacts(monkeypatch, [])
+    monkeypatch.setattr(ds, "_load_manager_profile",
+                        lambda: ds._ManagerProfile(full_name="Игорь Маниахин",
+                                                    email="igor@ex.com"))
+
+    engine = MagicMock()
+    engine.ask.return_value = (
+        "### РЕКОМЕНДАЦИЯ / ДЕЙСТВИЕ\n"
+        "**Действие: подготовить поручения | Исполнитель: Анна | Срок: завтра**\n\n"
+        "### КОНТЕКСТ ДЛЯ ИСПОЛНИТЕЛЯ\n"
+        "- От кого запрос: Иван\n\n"
+        "### ЧЕРНОВИК ЗАДАЧИ ДЛЯ СОТРУДНИКА\n"
+        "Анна, прошу подготовить список поручений для Игоря по теме Q3 budget.\n\n"
+        "### ПРИМЕЧАНИЕ ДЛЯ РУКОВОДИТЕЛЯ\n"
+        "- Контрольная точка: завтра\n"
+    )
+    build_suggestion(
+        item=_item(),
+        contact=DelegateContact(name="Анна Сидорова", email="anna@ex.com", role="HR"),
+        user_note="ускорь",
+        mlx_engine=engine,
+    )
+    call = engine.ask.call_args
+    q = call.kwargs["question"]
+    assert "Игорь Маниахин" in q, "manager full_name must reach the LLM"
+    assert "igor@ex.com"    in q, "manager email must reach the LLM"
+    assert "Анна Сидорова"  in q, "colleague name must reach the LLM"
+    assert "anna@ex.com"    in q, "colleague email must reach the LLM"
+    assert "ускорь"         in q, "user note must reach the LLM"
+    assert "поручен" in q.lower() or "разобрат" in q.lower(), (
+        "task semantics (prepare assignments OR research) must reach the LLM"
+    )
+
+
+def test_mlx_path_extracts_employee_task_as_email_body(monkeypatch):
+    """Backend picks the «ЧЕРНОВИК ЗАДАЧИ ДЛЯ СОТРУДНИКА» section out of
+    the 4-section LLM output and uses that as the email body sent to
+    Mail.app.  The rest is preserved in ``full_text`` for the preview."""
+    from unittest.mock import MagicMock
+    from personal_assistant.services.delegate_service import build_suggestion
+    from personal_assistant.services.tool_prompts import DelegateContact
+    _patch_contacts(monkeypatch, [])
+
+    engine = MagicMock()
+    engine.ask.return_value = (
+        "### РЕКОМЕНДАЦИЯ / ДЕЙСТВИЕ\n"
+        "Действие X.\n\n"
+        "### КОНТЕКСТ ДЛЯ ИСПОЛНИТЕЛЯ\n"
+        "Контекст Y.\n\n"
+        "### ЧЕРНОВИК ЗАДАЧИ ДЛЯ СОТРУДНИКА\n"
+        "Анна, добрый день!\nПрошу подготовить список поручений до завтра.\n\n"
+        "### ПРИМЕЧАНИЕ ДЛЯ РУКОВОДИТЕЛЯ\n"
+        "Контрольная точка: завтра.\n"
+    )
+    s = build_suggestion(
+        item=_item(),
+        contact=DelegateContact(name="Анна", email="anna@ex.com"),
+        user_note="",
+        mlx_engine=engine,
+    )
+    assert s.mlx_used is True
+    # intro = just the employee-task section
+    assert "Анна, добрый день!" in s.intro
+    assert "Прошу подготовить список поручений" in s.intro
+    # Other sections must NOT leak into the email body
+    assert "Действие X" not in s.intro
+    assert "Контекст Y" not in s.intro
+    assert "Контрольная точка" not in s.intro
+    # But the full analysis is kept on the suggestion for the preview modal
+    assert "Действие X" in s.full_text
+    assert "Контрольная точка" in s.full_text
+
+
+def test_extract_employee_task_returns_empty_when_section_missing():
+    """Free-form LLM output without the section header — extractor
+    returns empty so the caller falls back to using the full text."""
+    from personal_assistant.services.delegate_service import _extract_employee_task
+    assert _extract_employee_task("Just a free-form answer.") == ""
+    assert _extract_employee_task("") == ""
+
+
+def test_extract_employee_task_supports_h2_h3_h4():
+    """Header level shouldn't matter — `##`, `###`, `####` all work."""
+    from personal_assistant.services.delegate_service import _extract_employee_task
+    for n in (2, 3, 4):
+        text = f"{'#' * n} ЧЕРНОВИК ЗАДАЧИ ДЛЯ СОТРУДНИКА\nBody line.\n"
+        assert _extract_employee_task(text) == "Body line."
+
+
+def test_extract_employee_task_supports_short_header_alias():
+    """Accept the shorter ``ЗАДАЧА ДЛЯ СОТРУДНИКА`` form too."""
+    from personal_assistant.services.delegate_service import _extract_employee_task
+    text = "### Задача для сотрудника\nДелай X.\n"
+    assert _extract_employee_task(text) == "Делай X."
+
+
+def test_load_manager_profile_falls_back_to_settings_email(tmp_path, monkeypatch):
+    """Empty profile but configured ``settings.user_email`` — the loader
+    still surfaces the email so downstream code can use it."""
+    from personal_assistant.config import settings
+    from personal_assistant.profile import service as ps
+    from personal_assistant.services.delegate_service import _load_manager_profile
+
+    # The profile path is bound at import time to ``settings.vault_path``
+    # so we need to override it directly — patching ``settings.vault_path``
+    # alone won't rebind it.
+    monkeypatch.setattr(ps, "_PROFILE_PATH", tmp_path / "profile.json")
+    monkeypatch.setattr(settings, "vault_path", tmp_path)
+    monkeypatch.setattr(settings, "user_email", "igor@ex.com")
+
+    prof = _load_manager_profile()
+    assert prof.email == "igor@ex.com"
+    assert prof.full_name == ""
+    assert prof.display == "igor@ex.com"
+
+
+def test_manager_profile_display_prefers_full_name_and_email():
+    from personal_assistant.services.delegate_service import _ManagerProfile
+    assert _ManagerProfile("Игорь Маниахин", "igor@ex.com").display \
+        == "Игорь Маниахин <igor@ex.com>"
+    assert _ManagerProfile("Игорь Маниахин", "").display == "Игорь Маниахин"
+    assert _ManagerProfile("", "igor@ex.com").display == "igor@ex.com"
+    assert _ManagerProfile("", "").display == "руководитель"
+    assert _ManagerProfile("Игорь Маниахин", "").first_name == "Игорь"
+    assert _ManagerProfile("", "").first_name == ""
+
+
 def test_tool_prompts_effective_delegate_uses_default_when_empty():
     from personal_assistant.services.tool_prompts import (
         DEFAULT_DELEGATE_SYSTEM,

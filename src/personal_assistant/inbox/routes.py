@@ -671,6 +671,11 @@ def delegate_suggest(item_id: str, req: DelegateSuggestRequest):
         },
         "subject": suggestion.subject,
         "intro": suggestion.intro,
+        # Full 4-section analysis from the LLM (РЕКОМЕНДАЦИЯ / КОНТЕКСТ /
+        # ЧЕРНОВИК ЗАДАЧИ / ПРИМЕЧАНИЕ).  Frontend modal renders it in
+        # the preview block so the manager sees the reasoning behind
+        # the email body that's about to be sent.
+        "full_text": suggestion.full_text,
         "mlx_used": suggestion.mlx_used,
         # Pre-built payload — the frontend can POST this verbatim to
         # /api/chat/save-draft-mail to open Mail.app.

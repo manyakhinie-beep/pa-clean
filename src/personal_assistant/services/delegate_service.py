@@ -48,8 +48,15 @@ from personal_assistant.services.tool_prompts import (
 class DelegateSuggestion:
     """Result of generating a delegate-forward intro.
 
-    :ivar intro: Multi-line intro text — the body of the forwarded email.
-    :ivar subject: Suggested subject (``Fwd: …`` or ``Поручение: …``).
+    :ivar intro: Body of the email sent to the colleague. With the new
+        4-section system prompt this is the **«ЧЕРНОВИК ЗАДАЧИ ДЛЯ
+        СОТРУДНИКА»** block extracted from the LLM output; with the
+        rule-based fallback this is a deterministic short text addressed
+        to the colleague.
+    :ivar full_text: Complete LLM output — РЕКОМЕНДАЦИЯ / КОНТЕКСТ /
+        ЧЕРНОВИК ЗАДАЧИ / ПРИМЕЧАНИЕ.  Shown in the WebUI preview so the
+        manager sees the full analysis; not sent to Mail.
+    :ivar subject: Suggested subject (``Поручение: …``).
     :ivar contact: The colleague picked from ``delegate_contacts``.
     :ivar source_message_id: Vault id of the original mail item.
     :ivar mlx_used: ``True`` when the intro came from MLX, ``False`` for
@@ -61,6 +68,7 @@ class DelegateSuggestion:
     contact: DelegateContact
     source_message_id: str
     mlx_used: bool
+    full_text: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -93,34 +101,152 @@ def build_suggestion(
 ) -> DelegateSuggestion:
     """Produce intro text + subject for delegating an inbox item.
 
-    :param item: dict returned by ``_doc_to_item`` (frontmatter + body
-        preview).  Expected keys: ``id``, ``subject``, ``sender_name``,
-        ``sender_email``, ``body_preview`` (preview ok).
-    :param contact: target colleague.
-    :param user_note: optional one-liner from the manager ("ускорь, прошу
-        вернуть к среде").  Forwarded to MLX as extra context.
-    :param mlx_engine: instance of MLXEngine or ``None``.  When ``None``,
-        falls back to a deterministic rule-based template.
+    Pipeline:
+
+      1. Load the manager's profile (Settings → Profile) so the LLM
+         knows whose name appears in the colleague's task: "подготовь
+         поручения для {full_name}".  Falls back to "руководитель"
+         when the profile is empty.
+      2. Hand the system prompt (``effective_delegate``) + a user
+         message containing the manager profile, the chosen contact,
+         the source-email facts and an optional manager note to MLX.
+         The LLM produces a 4-section analysis (РЕКОМЕНДАЦИЯ / КОНТЕКСТ
+         / ЧЕРНОВИК ЗАДАЧИ / ПРИМЕЧАНИЕ).
+      3. Extract the «ЧЕРНОВИК ЗАДАЧИ ДЛЯ СОТРУДНИКА» section as the
+         actual email body — that's what goes into the Mail.app draft.
+         The full 4-section text is kept on the suggestion for the
+         preview modal.
+      4. When MLX is unavailable, the rule-based fallback addresses the
+         colleague by name and asks them to either prepare assignments
+         for the manager or research the question.
     """
+    manager_profile = _load_manager_profile()
     subject = _build_subject(item)
-    intro = _build_intro_mlx(item, contact, user_note, mlx_engine) if mlx_engine else None
-    if intro is None or not intro.strip():
-        intro = _build_intro_rule_based(item, contact, user_note)
-        mlx_used = False
-    else:
+
+    full_text: Optional[str] = None
+    if mlx_engine:
+        full_text = _build_intro_mlx(
+            item=item,
+            contact=contact,
+            user_note=user_note,
+            engine=mlx_engine,
+            manager=manager_profile,
+        )
+
+    if full_text and full_text.strip():
+        intro = _extract_employee_task(full_text) or full_text
         mlx_used = True
+    else:
+        intro = _build_intro_rule_based(item, contact, user_note, manager_profile)
+        full_text = intro
+        mlx_used = False
+
     return DelegateSuggestion(
         intro=intro.strip(),
         subject=subject,
         contact=contact,
         source_message_id=str(item.get("id", "")),
         mlx_used=mlx_used,
+        full_text=full_text.strip(),
     )
 
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+@dataclass
+class _ManagerProfile:
+    """Snapshot of the assistant's user (the inbox owner) — injected
+    into the delegate prompt so the colleague knows whom to deliver
+    assignments to."""
+
+    full_name: str = ""
+    email: str = ""
+
+    @property
+    def first_name(self) -> str:
+        return (self.full_name.split()[0] if self.full_name else "").strip()
+
+    @property
+    def display(self) -> str:
+        """Render as ``Full Name <email>`` / ``Full Name`` / ``руководитель``."""
+        if self.full_name and self.email:
+            return f"{self.full_name} <{self.email}>"
+        if self.full_name:
+            return self.full_name
+        if self.email:
+            return self.email
+        return "руководитель"
+
+
+def _load_manager_profile() -> _ManagerProfile:
+    """Pull ``full_name`` and ``user_email`` from Settings → Profile.
+
+    Falls back to ``settings.user_email`` if the profile is empty.  Never
+    raises — a stale or unreadable profile must not block delegation.
+    """
+    try:
+        from personal_assistant.profile.service import load_profile
+        prof = load_profile()
+        name = (prof.full_name or "").strip()
+        email = (prof.user_email or "").strip() if prof.user_email else ""
+    except Exception as exc:  # noqa: BLE001 — defensive
+        logger.debug(f"[delegate] load_profile failed: {exc}")
+        name, email = "", ""
+    if not email:
+        try:
+            from personal_assistant.config import settings
+            email = (settings.user_email or "").strip()
+        except Exception:
+            pass
+    return _ManagerProfile(full_name=name, email=email)
+
+
+# ---------------------------------------------------------------------------
+# Section extraction (4-section LLM output → just the employee task body)
+# ---------------------------------------------------------------------------
+
+# Matches the section header we emit in DEFAULT_DELEGATE_SYSTEM. Made
+# permissive on whitespace and ## / ### levels so a hand-edited user prompt
+# still works.
+_EMP_TASK_HEADER = (
+    r"^\s*#{1,4}\s*(?:черновик\s+задачи(?:\s+для\s+сотрудника)?|"
+    r"задача\s+для\s+сотрудника|"
+    r"task\s+for\s+employee)\s*$"
+)
+
+
+def _extract_employee_task(text: str) -> str:
+    """Return the body of the ``ЧЕРНОВИК ЗАДАЧИ ДЛЯ СОТРУДНИКА`` block.
+
+    The standard delegate prompt produces four sections (РЕКОМЕНДАЦИЯ /
+    КОНТЕКСТ / ЧЕРНОВИК ЗАДАЧИ / ПРИМЕЧАНИЕ).  Only the third one is the
+    actual email body — that's what we hand to Mail.app.  This helper
+    pulls it out; if the model returned a free-form text without
+    sections, we return an empty string and the caller keeps the full
+    text.
+    """
+    import re as _re
+    if not text:
+        return ""
+    lines = text.splitlines()
+    start = None
+    for i, line in enumerate(lines):
+        if _re.match(_EMP_TASK_HEADER, line, flags=_re.IGNORECASE):
+            start = i + 1
+            break
+    if start is None:
+        return ""
+    # End at the next H2/H3 header or end-of-text
+    end = len(lines)
+    for j in range(start, len(lines)):
+        if _re.match(r"^\s*#{1,4}\s+\S", lines[j]):
+            end = j
+            break
+    body = "\n".join(lines[start:end]).strip()
+    return body
 
 
 def _build_subject(item: dict) -> str:
@@ -141,18 +267,28 @@ def _build_subject(item: dict) -> str:
 
 
 def _build_intro_rule_based(
-    item: dict, contact: DelegateContact, user_note: str
+    item: dict,
+    contact: DelegateContact,
+    user_note: str,
+    manager: _ManagerProfile,
 ) -> str:
     """Deterministic fallback intro — never depends on MLX.
 
-    Format: greeting → reason → ask → deadline placeholder → sign-off cue.
-    All in Russian. Trimmed for readability.
+    Addresses the picked colleague by first name and asks them to either
+    prepare a list of action items for the manager (whose profile is
+    pulled from Settings) or research the question.  Matches the user's
+    spec: «обращено к выбранному сотруднику; он должен подготовить
+    поручения для пользователя ассистента или разобраться в вопросе».
     """
     first_name = (contact.name or "").split()[0] if contact.name else "коллега"
     subject = str(item.get("subject") or "без темы").strip()
     sender = str(item.get("sender_name") or item.get("sender_email") or "коллега").strip()
     preview = (item.get("body_preview") or item.get("preview") or "").strip()
-    snippet = preview.split("\n", 1)[0][:160] if preview else ""
+    snippet = preview.split("\n", 1)[0][:200] if preview else ""
+
+    manager_phrase = (
+        f"для {manager.first_name}" if manager.first_name else "для руководителя"
+    )
 
     parts: list[str] = [f"{first_name}, добрый день!"]
     parts.append(
@@ -161,8 +297,14 @@ def _build_intro_rule_based(
     )
     if user_note.strip():
         parts.append(user_note.strip())
+    # Two-track ask: prepare assignments for the manager OR research and report
     parts.append(
-        "Прошу взять в работу и сообщить статус (или сразу ответить отправителю с копией мне)."
+        f"Прошу разобраться в вопросе и подготовить список поручений {manager_phrase} "
+        f"(что нужно сделать, кому, к какому сроку). Либо — если задача в зоне твоей "
+        f"ответственности — отработай и сообщи статус."
+    )
+    parts.append(
+        "Если нужны дополнительные данные или согласование — напиши, обсудим."
     )
     parts.append("Спасибо!")
     return "\n\n".join(parts)
@@ -173,11 +315,25 @@ def _build_intro_mlx(
     contact: DelegateContact,
     user_note: str,
     engine,
+    manager: _ManagerProfile,
 ) -> Optional[str]:
-    """MLX-generated intro via the user-configured ``delegate_system`` prompt.
+    """MLX-generated 4-section analysis via the configured ``delegate_system``
+    prompt.
 
-    Returns ``None`` on any engine error so the caller can fall back to the
-    rule-based path.
+    Builds a context user-message that pins:
+      * **Руководитель (пользователь ассистента)** — full_name + email
+        from Settings → Profile so the colleague's task is framed as
+        «подготовить поручения для {имя}».
+      * **Сотрудник** — chosen contact (name, role, email) so the LLM
+        addresses them by name and adapts the tone to the role.
+      * **Источник** — sender + subject + body snippet.
+      * **Заметка руководителя** — optional.
+      * **Семантика поручения** — colleague should either prepare a list
+        of assignments for the manager or research and report.
+
+    Returns the full LLM output (4 sections per the system prompt); the
+    caller is responsible for extracting the email-body section.  Returns
+    ``None`` on any engine error so the caller falls back to rule-based.
     """
     prompts = get_tool_prompts()
     system = prompts.effective_delegate()
@@ -190,23 +346,41 @@ def _build_intro_mlx(
     body_snippet = preview[:1500]
 
     role_suffix = f" ({contact.role})" if contact.role else ""
-    note_block = f"\n\nЗаметка от руководителя: {user_note.strip()}" if user_note.strip() else ""
+    note_block = (
+        f"\n\n## Заметка от руководителя\n{user_note.strip()}"
+        if user_note.strip()
+        else ""
+    )
 
     prompt = (
-        f"Кому делегируем: {contact.name}{role_suffix} <{contact.email}>.\n"
-        f"От кого письмо: {sender} <{sender_email}>.\n"
-        f"Тема: {subject}.\n"
-        f"Тело письма (фрагмент):\n{body_snippet}"
+        f"## Руководитель (пользователь ассистента)\n"
+        f"Имя: {manager.full_name or '—'}\n"
+        f"Email: {manager.email or '—'}\n\n"
+        f"## Сотрудник для делегирования\n"
+        f"Имя: {contact.name}{role_suffix}\n"
+        f"Email: {contact.email}\n"
+        + (f"Заметка: {contact.note}\n" if contact.note else "")
+        + "\n"
+        f"## Источник\n"
+        f"От кого письмо: {sender} <{sender_email}>\n"
+        f"Тема: {subject}\n\n"
+        f"## Тело письма (фрагмент)\n{body_snippet}"
         f"{note_block}\n\n"
-        f"Составь короткое (4-7 строк) тело письма для делегирования. "
-        f"Только текст вводной, без темы и без `Кому`."
+        f"## Задача\n"
+        f"Подготовь анализ и черновик задачи для сотрудника по формату из "
+        f"system-промпта. Сотрудник должен **либо** подготовить список "
+        f"поручений для руководителя (что сделать, кому, к какому сроку), "
+        f"**либо** разобраться в вопросе самостоятельно на основе анализа. "
+        f"В «ЧЕРНОВИК ЗАДАЧИ ДЛЯ СОТРУДНИКА» обращайся к "
+        f"{(contact.name or 'сотруднику').split()[0]} по имени; "
+        f"имя руководителя — {manager.first_name or 'руководитель'}."
     )
 
     try:
         result = engine.ask(
             question=prompt,
             system=system,
-            max_tokens=400,
+            max_tokens=900,    # 4 sections need more room than a 4-7-line intro
             temperature=0.2,
         )
         return result.strip() if isinstance(result, str) else None

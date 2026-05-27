@@ -1112,9 +1112,13 @@ async function _openDelegatePicker(item) {
                     placeholder="Напр.: «Прошу ускорить, ждут к среде»"></textarea>
         </label>
         <div class="ib-delegate-modal__preview" id="ib-delegate-preview" style="display:none">
-          <div class="ib-delegate-modal__preview-label">Предпросмотр</div>
+          <div class="ib-delegate-modal__preview-label">Письмо коллеге</div>
           <div class="ib-delegate-modal__preview-subject" id="ib-delegate-preview-subject"></div>
-          <div class="ib-delegate-modal__preview-intro" id="ib-delegate-preview-intro"></div>
+          <div class="ib-delegate-modal__preview-intro"   id="ib-delegate-preview-intro"></div>
+          <details class="ib-delegate-modal__preview-analysis-wrap" id="ib-delegate-preview-analysis-wrap" style="display:none">
+            <summary>Полный анализ (РЕКОМЕНДАЦИЯ / КОНТЕКСТ / ЗАДАЧА / ПРИМЕЧАНИЕ)</summary>
+            <div class="ib-delegate-modal__preview-analysis" id="ib-delegate-preview-analysis"></div>
+          </details>
           <div class="ib-delegate-modal__preview-flag" id="ib-delegate-preview-flag"></div>
         </div>
       </div>
@@ -1135,7 +1139,12 @@ async function _openDelegatePicker(item) {
     modal.querySelector('input[name="ib-delegate-target"]:checked')?.value || contacts[0].email;
   const _note = () => modal.querySelector('#ib-delegate-note')?.value || '';
 
-  // Preview = call /delegate-suggest without opening Mail
+  // Preview = call /delegate-suggest without opening Mail.
+  //
+  // Backend now returns a 4-section analysis (full_text) plus the
+  // employee-task body (intro). The preview block shows BOTH so the
+  // manager sees the full reasoning above the email body that will be
+  // sent to the colleague.
   async function _doPreview() {
     const btn = modal.querySelector('#ib-delegate-preview-btn');
     btn.disabled = true; btn.textContent = '⏳';
@@ -1143,7 +1152,18 @@ async function _openDelegatePicker(item) {
       const res = await api.inboxDelegateSuggest(item.id, _selectedEmail(), _note());
       modal.querySelector('#ib-delegate-preview').style.display = '';
       modal.querySelector('#ib-delegate-preview-subject').textContent = res.subject;
+      // Body of the email being sent to the colleague (extracted from
+      // the LLM's «ЧЕРНОВИК ЗАДАЧИ ДЛЯ СОТРУДНИКА» section).
       modal.querySelector('#ib-delegate-preview-intro').textContent = res.intro;
+      // Optional full analysis (РЕКОМЕНДАЦИЯ / КОНТЕКСТ / ЧЕРНОВИК /
+      // ПРИМЕЧАНИЕ) — shown collapsed below the intro inside a <details>
+      // so the manager can drill into the reasoning without it dominating
+      // the modal.
+      const analysisEl    = modal.querySelector('#ib-delegate-preview-analysis');
+      const analysisWrap  = modal.querySelector('#ib-delegate-preview-analysis-wrap');
+      const showAnalysis  = res.full_text && res.full_text.trim() !== (res.intro || '').trim();
+      if (analysisWrap) analysisWrap.style.display = showAnalysis ? '' : 'none';
+      if (analysisEl)   analysisEl.textContent = showAnalysis ? res.full_text : '';
       modal.querySelector('#ib-delegate-preview-flag').textContent =
         res.mlx_used ? '🤖 Сгенерировано MLX' : '⚙️ Шаблон без MLX (модель недоступна)';
       return res;
