@@ -9,7 +9,7 @@ import { initSearch }   from './search.js?v=20260526131517';
 import { initSettings } from './settings.js?v=20260520153419';
 import { initRules }    from './rules.js?v=20260528200000';
 import { initReports }  from './reports.js?v=20260520153419';
-import { initInbox }    from './inbox.js?v=20260527154107';
+import { initInbox }    from './inbox.js?v=20260528210000';
 import { initToday }    from './today.js?v=20260526121929';
 
 // ── Toast ────────────────────────────────────────────────────────────────────

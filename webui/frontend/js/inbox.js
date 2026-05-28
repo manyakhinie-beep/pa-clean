@@ -249,6 +249,12 @@ function _renderItemHtml(item, inThread = false) {
     ? '<span class="ib-followup-badge" title="Ожидает вашего ответа">🔔</span>'
     : '';
 
+  // Deadline pill — извлечённый из текста письма срок ("до 14 июн",
+  // "сегодня", "просрочено 2 дн").  Цвет градуирует срочность: красный
+  // для просрочки и «сегодня», оранжевый для «завтра», жёлтый для
+  // ближайшей недели, нейтральный для дальних дат.
+  const deadlineBadge = _deadlineBadgeHtml(item.deadline);
+
   // Stage 8: AI badge — shown when item has 'ai_classified' tag
   const isAIClassified = Array.isArray(item.tags) && item.tags.some(t => {
     const label = t.label || t.cls || String(t);
@@ -281,7 +287,7 @@ function _renderItemHtml(item, inThread = false) {
         ${unreadDot}
         <span class="ib-item-sender">${_esc(item.sender_name)}</span>
         ${item.sender_role ? `<span class="ib-item-role">${_esc(item.sender_role)}</span>` : ''}
-        <span class="ib-item-badges">${intentBadge}${replyBadge}${actionsBadge}${followupBadge}${aiBadge}</span>
+        <span class="ib-item-badges">${intentBadge}${replyBadge}${actionsBadge}${followupBadge}${aiBadge}${deadlineBadge}</span>
         <span class="ib-item-time">${_esc(item.time_label)}</span>
       </div>
       <div class="ib-item-subject">${typeIcon}${_esc(item.subject)}</div>
@@ -289,6 +295,63 @@ function _renderItemHtml(item, inThread = false) {
       ${(ruleChips || tags) ? `<div class="ib-item-tags">${ruleChips}${tags}</div>` : ''}
     </div>
   </div>`;
+}
+
+/** Render the deadline pill for an inbox card.
+ *
+ *  Source: ``item.deadline`` — ISO UTC datetime set by
+ *  ``inbox_rules_service`` via ``deadline_extractor.extract_deadline``.
+ *  Renders nothing when no deadline was extracted.
+ *
+ *  Visual grades by remaining days (UTC midnight comparison):
+ *    < 0   → «просрочено N дн»     — red, attention-grabbing
+ *    = 0   → «сегодня»              — red
+ *    = 1   → «завтра»               — orange
+ *    2-7   → «до DD MMM»            — yellow
+ *    > 7   → «до DD MMM»            — neutral (just informational)
+ */
+function _deadlineBadgeHtml(iso) {
+  if (!iso || typeof iso !== 'string') return '';
+  const due = new Date(iso);
+  if (isNaN(due.getTime())) return '';
+  // Сравниваем по дням (00:00 локального дня), а не по timestamp — иначе
+  // письмо «сегодня в 23:50» при просмотре в 00:01 следующего дня дало
+  // бы дельту -1 и «просрочено», что технически верно но контр-интуитивно.
+  const today = new Date();
+  const dueDay = Date.UTC(due.getUTCFullYear(), due.getUTCMonth(), due.getUTCDate());
+  const nowDay = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  const days = Math.round((dueDay - nowDay) / 86_400_000);
+
+  const months = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+  const dd = due.getUTCDate();
+  const mm = months[due.getUTCMonth()];
+  const dateLabel = `${dd} ${mm}`;
+
+  let cls = 'ib-deadline-pill ib-deadline-pill--';
+  let label, title;
+  if (days < 0) {
+    const overdue = Math.abs(days);
+    cls += 'overdue';
+    label = `просрочено ${overdue} дн`;
+    title = `Срок был ${dateLabel} (${overdue} дн. назад)`;
+  } else if (days === 0) {
+    cls += 'today';
+    label = 'сегодня';
+    title = `Срок: сегодня (${dateLabel})`;
+  } else if (days === 1) {
+    cls += 'tomorrow';
+    label = 'завтра';
+    title = `Срок: завтра (${dateLabel})`;
+  } else if (days <= 7) {
+    cls += 'week';
+    label = `до ${dateLabel}`;
+    title = `Срок через ${days} дн. (${dateLabel})`;
+  } else {
+    cls += 'future';
+    label = `до ${dateLabel}`;
+    title = `Срок через ${days} дн. (${dateLabel})`;
+  }
+  return `<span class="${cls}" title="${title}">⏱ ${label}</span>`;
 }
 
 /** Render the GTD-rule-derived chips (Срочно / Важно / Ответить).
