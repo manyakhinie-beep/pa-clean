@@ -427,7 +427,10 @@ def _mlx_insight(
             "о его дне: что важнее всего сделать первым делом. "
             "Не больше 25 слов, деловой стиль, без приветствия."
         )
-        system = "Ты — деловой ассистент. Дай краткий приоритет на день."
+        system = (
+            "Ты — деловой ассистент. Дай краткий приоритет на день. "
+            "Отвечай только на русском языке."
+        )
         result = engine.ask(prompt, system=system, max_tokens=_BRIEF_MAX_TOKENS)
         if result and len(result.strip()) > 10:
             return result.strip()
