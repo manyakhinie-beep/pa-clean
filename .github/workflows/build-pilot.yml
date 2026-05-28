@@ -1,0 +1,119 @@
+# Pilot bundle builder — собирает PaClean.app для пилотного тестирования.
+#
+# Trigger:
+#   - Push на ветку packaging/* (CI smoke на каждый коммит)
+#   - Push tag v*-pilot* (релиз — артефакт прикрепляется к Releases)
+#   - Manual via workflow_dispatch (ручная сборка из любой ветки)
+#
+# Что НЕ делается:
+#   - Нет Apple Developer ID → нет codesign --sign "Developer ID …", нет
+#     notarization.  Артефакт пригоден для команды разработки и friendly
+#     testers через Ctrl-клик → Открыть.
+#
+# Раннер: macos-14 = arm64, нужно для MLX-совместимых wheels и для того
+# чтобы pyapp launcher работал на target-архитектуре пользователей.
+
+name: build-pilot
+
+on:
+  push:
+    branches:
+      - 'packaging/**'
+    tags:
+      - 'v*-pilot*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Pilot tag suffix (e.g. v0.9.0-pilot-2026-05-28)'
+        required: false
+        default: 'dev'
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ── uv для wheel-builder + lock ─────────────────────────────────────
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: latest
+
+      # ── Rust toolchain для PyApp launcher ───────────────────────────────
+      # Rust на macOS-14 раннере уже есть, но фиксируем версию для воспроизводимости.
+      - uses: dtolnay/rust-toolchain@stable
+
+      # ── create-dmg для упаковки в .dmg ─────────────────────────────────
+      # Не обязательно, build_pilot.sh упадёт на .zip-фолбэк.  Но красивый .dmg
+      # — плюс к UX для пилотов.
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      # ── Архитектурная проверка перед сборкой ────────────────────────────
+      - name: Verify Apple Silicon runner
+        run: |
+          arch=$(uname -m)
+          echo "Runner arch: $arch"
+          [[ "$arch" == "arm64" ]] || { echo "Need arm64 runner"; exit 1; }
+
+      # ── Сборка ────────────────────────────────────────────────────────
+      - name: Build pilot bundle
+        run: ./scripts/build_pilot.sh
+
+      # ── Smoke-проверка: бандл хотя бы запускается без падения ──────────
+      # На CI без HOME-настроек запуск займёт пару секунд и упадёт на отсутствии
+      # модели — это OK.  Проверяем что launcher не падает на старте.
+      - name: Smoke-launch the bundle (5s timeout)
+        run: |
+          set +e
+          # Запускаем executable напрямую, не через open — иначе CI ждёт окно браузера.
+          timeout 5s ./dist/PaClean.app/Contents/MacOS/PaClean > smoke.log 2>&1
+          rc=$?
+          echo "Exit code: $rc"
+          echo "--- last 30 lines of smoke.log ---"
+          tail -30 smoke.log || true
+          # rc=124 (timeout) или rc=0 — норма.  Падение Python = провал.
+          [[ "$rc" == "124" || "$rc" == "0" ]] || { echo "Bundle crashed on launch"; exit 1; }
+
+      # ── Артефакты ──────────────────────────────────────────────────────
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PaClean-pilot-arm64-${{ github.sha }}
+          path: |
+            dist/PaClean.app
+            dist/PaClean-pilot-*.dmg
+            dist/PaClean-pilot-*.zip
+          retention-days: 14
+          if-no-files-found: warn
+
+      # ── Релиз — если запушен тег v*-pilot* ─────────────────────────────
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-pilot')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/PaClean-pilot-*.dmg
+            dist/PaClean-pilot-*.zip
+          draft: true
+          prerelease: true
+          body: |
+            **Pilot build — ad-hoc signed (нет Apple Developer ID).**
+
+            ## Установка
+            1. Скачайте `PaClean-pilot-*.dmg`.
+            2. Дважды кликните, перетащите PaClean.app в `~/Applications`.
+            3. **Ctrl-клик** по PaClean.app → «Открыть» → «Открыть» (только при первом запуске).
+            4. Первый запуск займёт 1-3 минуты (устанавливаются Python и зависимости).
+            5. WebUI откроется в браузере автоматически на http://127.0.0.1:8765
+
+            ## Известные ограничения
+            - **Только macOS Apple Silicon** (Intel не поддерживается из-за MLX).
+            - **Корпоративные MDM-маки** с включённой Gatekeeper-политикой могут не разрешить запуск unsigned бандла. Свяжитесь с разработчиком.
+            - Веса модели качаются отдельно через мастер настройки в WebUI (~6 GB).
+
+            ## Обратная связь
+            В шапке WebUI кнопка «Сообщить о проблеме» собирает диагностику в буфер обмена — присылайте сюда или в Slack.

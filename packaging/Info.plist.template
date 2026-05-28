@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>PaClean</string>
+
+    <key>CFBundleDisplayName</key>
+    <string>PaClean</string>
+
+    <key>CFBundleIdentifier</key>
+    <string>com.paclean.assistant</string>
+
+    <key>CFBundleVersion</key>
+    <string>__VERSION__</string>
+
+    <key>CFBundleShortVersionString</key>
+    <string>__VERSION__</string>
+
+    <key>CFBundleExecutable</key>
+    <string>PaClean</string>
+
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+
+    <!-- macOS 13+ только (Apple Silicon обязательно для MLX). -->
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+
+    <key>LSArchitecturePriority</key>
+    <array>
+        <string>arm64</string>
+    </array>
+
+    <!-- Регистрируем приложение как «не-документное» (background-ish):
+         иконка не появляется в Dock сразу, а WebUI открывается в браузере. -->
+    <key>LSUIElement</key>
+    <false/>
+
+    <!-- Apple Events / Automation: пользователь увидит TCC-диалоги при
+         первом обращении приложения к Mail.app и Calendar.app.  Мы должны
+         объяснить ЗАЧЕМ нам разрешение — иначе тестировщик откажет. -->
+    <key>NSAppleEventsUsageDescription</key>
+    <string>PaClean читает ваши письма и события календаря, чтобы синхронизировать их в локальный vault и помогать с почтой и встречами. Все данные остаются на вашем компьютере.</string>
+
+    <!-- На случай если в будущем понадобятся прямые EventKit / EKEventStore
+         вызовы вместо AppleScript к Calendar.app. -->
+    <key>NSCalendarsUsageDescription</key>
+    <string>PaClean читает ваши события календаря для синхронизации и помощи в планировании.</string>
+
+    <!-- Светлая/тёмная тема — следуем системной. -->
+    <key>NSRequiresAquaSystemAppearance</key>
+    <false/>
+
+    <!-- Не запрашиваем доступ к камере/микрофону/локации/контактам и
+         не объявляем эти keys — иначе MDM-политики могут жаловаться. -->
+</dict>
+</plist>
