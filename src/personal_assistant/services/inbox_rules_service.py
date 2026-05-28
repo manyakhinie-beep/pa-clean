@@ -35,6 +35,10 @@ from typing import Any, Optional
 
 from loguru import logger
 
+from personal_assistant.services.deadline_extractor import (
+    extract_deadline,
+    fits_horizon,
+)
 from personal_assistant.services.rule_engine import (
     ActionType,
     EisenhowerQuadrant,
@@ -160,14 +164,52 @@ def apply_rules_to_item(
     structured_rules = structured_rules or []
     gtd_rules = gtd_rules or []
 
+    # No-op fast path: без правил извлекать deadline незачем — это и
+    # экономит regex-проходы, и сохраняет контракт «без правил — никаких
+    # мутаций item» (тест ``test_no_rules_is_noop``).
+    if not structured_rules and not gtd_rules:
+        return item
+
     text = _item_text(item)
     contacts = _item_contacts(item)
 
     extra_tags: list[Any] = []
 
+    # ── Извлечение срока из письма ──────────────────────────────────────
+    # «Срок» — это дата, к которой пользователю требуется выполнить
+    # действие.  Извлекаем один раз, сохраняем в item для UI и для
+    # фильтрации правил по deadline_horizon.  Reference — дата самого
+    # письма, если есть, иначе текущий момент.
+    deadline = None
+    try:
+        # Дата письма (вариант "date" или "received_date") — для
+        # относительных фраз вида «через 2 недели».
+        from datetime import datetime as _dt
+
+        ref_raw = item.get("date") or item.get("received_date") or ""
+        ref_dt: Optional[_dt] = None
+        if isinstance(ref_raw, str) and ref_raw:
+            try:
+                ref_dt = _dt.fromisoformat(ref_raw.replace("Z", "+00:00"))
+            except ValueError:
+                ref_dt = None
+        deadline = extract_deadline(text, reference_date=ref_dt)
+        if deadline is not None:
+            item["deadline"] = deadline.isoformat()
+    except Exception as exc:  # noqa: BLE001 — extractor никогда не валит inbox
+        logger.debug(f"[inbox_rules] deadline extraction failed for {item.get('id')!r}: {exc}")
+        deadline = None
+
     # ── Structured rules ────────────────────────────────────────────────
     if structured_rules:
-        result = classify_item(text, contacts, structured_rules)
+        # Отфильтруем правила, у которых deadline_horizon не подходит под
+        # извлечённый срок письма.  Правила с horizon="any" (default)
+        # проходят всегда — back-compat.
+        eligible_structured = [
+            r for r in structured_rules
+            if fits_horizon(deadline, getattr(r, "deadline_horizon", "any") or "any")
+        ]
+        result = classify_item(text, contacts, eligible_structured)
         if result.matched_rule_id:
             urg, imp = _flags_from_quadrant(result.eisenhower_quadrant.value)
             if urg:
@@ -199,6 +241,10 @@ def apply_rules_to_item(
         for r in gtd_rules:
             kw = (r.get("keyword") or "").strip().lower()
             if not kw or kw not in haystack:
+                continue
+            # Фильтр по deadline_horizon — то же поведение что у структурных.
+            horizon = (r.get("deadline_horizon") or "any").strip() or "any"
+            if not fits_horizon(deadline, horizon):
                 continue
             quadrant = r.get("quadrant") or EisenhowerQuadrant.Q2.value
             urg, imp = _flags_from_quadrant(quadrant)

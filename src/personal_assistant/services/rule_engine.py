@@ -91,6 +91,12 @@ class Rule(BaseModel):
     priority: int = Field(default=100, ge=1, le=999)
     tags: list[str] = Field(default_factory=list)
     enabled: bool = Field(default=True)
+    # Окно сроков, в которое должен попадать deadline письма для срабатывания
+    # правила.  Значения см. в ``deadline_extractor.DEADLINE_HORIZONS``:
+    # "any" (без фильтра, default), "today", "this_week", "this_month",
+    # "next_week", "next_month".  Когда horizon != "any" и письмо не
+    # содержит явного срока — правило НЕ срабатывает.
+    deadline_horizon: str = Field(default="any")
 
 
 # ---------------------------------------------------------------------------

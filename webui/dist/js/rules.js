@@ -282,6 +282,7 @@ function initGtdRules(ctx) {
       const row = document.createElement('div');
       row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--color-border)';
       const qLabel = QUADRANT_LABELS[rule.quadrant] || '—';
+      const horizon = rule.deadline_horizon || 'any';
       row.innerHTML = `
         <input class="settings__input" style="flex:1;max-width:170px"
           value="${_esc(rule.keyword || '')}" placeholder="Ключевое слово"
@@ -290,6 +291,15 @@ function initGtdRules(ctx) {
         <input class="settings__input" style="flex:2"
           value="${_esc(rule.action || '')}" placeholder="inbox, next, someday…"
           data-field="action" data-idx="${idx}">
+        <select class="settings__input" style="flex:0;min-width:130px;font-size:11px"
+          data-field="deadline_horizon" data-idx="${idx}" title="Срок: фильтр по дедлайну, извлечённому из письма">
+          <option value="any"        ${horizon==='any'        ?'selected':''}>Срок: любой</option>
+          <option value="today"      ${horizon==='today'      ?'selected':''}>Сегодня</option>
+          <option value="this_week"  ${horizon==='this_week'  ?'selected':''}>На этой неделе</option>
+          <option value="next_week"  ${horizon==='next_week'  ?'selected':''}>На следующей неделе</option>
+          <option value="this_month" ${horizon==='this_month' ?'selected':''}>В этом месяце</option>
+          <option value="next_month" ${horizon==='next_month' ?'selected':''}>В следующем месяце</option>
+        </select>
         <button class="btn btn--sm btn--secondary" data-pick-quadrant="${idx}"
           style="flex:0;white-space:nowrap;min-width:120px;font-size:11px">${_esc(qLabel)}</button>
         <button class="btn btn--sm btn--secondary" data-delete="${idx}" style="flex:0;color:#ef4444;border-color:#ef4444">✕</button>
@@ -312,7 +322,13 @@ function initGtdRules(ctx) {
   }
 
   gtdAddBtn?.addEventListener('click', () => {
-    gtdRules.push({ id: Date.now().toString(), keyword: '', action: 'inbox', quadrant: 'q2' });
+    gtdRules.push({
+      id: Date.now().toString(),
+      keyword: '',
+      action: 'inbox',
+      quadrant: 'q2',
+      deadline_horizon: 'any',
+    });
     renderGtdRules();
     updateGtdCount();
   });
@@ -399,6 +415,7 @@ function initStructuredRules(ctx) {
       <div style="flex:3;min-width:140px">Контакты</div>
       <div style="flex:0 0 150px">Квадрант</div>
       <div style="flex:2;min-width:110px">Действие</div>
+      <div style="flex:0 0 130px" title="Фильтр по сроку, извлечённому из письма">Срок</div>
       <div style="flex:0 0 60px">Приор.</div>
       <div style="flex:0 0 50px;text-align:center">Вкл</div>
       <div style="flex:0 0 28px"></div>
@@ -432,6 +449,20 @@ function initStructuredRules(ctx) {
         <select class="settings__input" style="flex:2;min-width:110px;font-size:11px" data-field="action_type" data-idx="${idx}">
           ${Object.entries(ACTION_LABELS).map(([k,v])=>`<option value="${k}"${rule.action_type===k?' selected':''}>${v}</option>`).join('')}
         </select>
+        <select class="settings__input" style="flex:0 0 130px;font-size:11px" data-field="deadline_horizon" data-idx="${idx}">
+          ${(() => {
+            const h = rule.deadline_horizon || 'any';
+            const opts = [
+              ['any','Любой'],
+              ['today','Сегодня'],
+              ['this_week','Эта неделя'],
+              ['next_week','След. неделя'],
+              ['this_month','Этот месяц'],
+              ['next_month','След. месяц'],
+            ];
+            return opts.map(([k,v])=>`<option value="${k}"${h===k?' selected':''}>${v}</option>`).join('');
+          })()}
+        </select>
         <input type="number" class="settings__input" style="flex:0 0 60px" min="1" max="999"
           value="${rule.priority||100}" data-field="priority" data-idx="${idx}">
         <div style="flex:0 0 50px;display:flex;justify-content:center">
@@ -464,7 +495,12 @@ function initStructuredRules(ctx) {
   }
 
   document.getElementById('structured-rules-add')?.addEventListener('click', () => {
-    rules.push({ name:'', keywords:[], contacts:[], eisenhower_quadrant:'q2', action_type:'info', priority:100, enabled:true });
+    rules.push({
+      name:'', keywords:[], contacts:[],
+      eisenhower_quadrant:'q2', action_type:'info',
+      deadline_horizon:'any',
+      priority:100, enabled:true,
+    });
     renderRules();
   });
 
