@@ -272,10 +272,18 @@ class MLXEngine:
     _load_lock = threading.Lock()
 
     def __init__(self, model_path: Optional[str] = None) -> None:
-        self._model_path = model_path or settings.mlx_model_path
+        # ``_override_path`` is the explicit value passed to the constructor;
+        # ``model_path`` (the property below) falls back to ``settings.mlx_model_path``
+        # on every access.  This makes the engine pick up live changes to the
+        # path made via Rules → AI settings without a server restart — the
+        # previous version captured ``settings.mlx_model_path`` once at
+        # construction and went stale forever.
+        self._override_path: Optional[str] = model_path
         self._model: Any = None
         self._tokenizer: Any = None
-        self._loaded = False
+        # Track what path the currently-loaded model came from so we can
+        # detect drift and reload on the next call.
+        self._loaded_from_path: Optional[str] = None
         # Eagerly check whether mlx-lm is importable so we can give a clear
         # message without crashing the server (install is optional on non-M1).
         if MLXEngine._mlx_available is None:
@@ -288,6 +296,53 @@ class MLXEngine:
                     "mlx-lm is not installed — LLM inference disabled. "
                     "To enable: uv pip install 'mlx-lm>=0.19.0'  (Apple Silicon only)"
                 )
+
+    # ------------------------------------------------------------------
+    # Path / loaded-state — both are properties that reflect live settings
+    # ------------------------------------------------------------------
+
+    @property
+    def model_path(self) -> str:
+        """Effective model path.
+
+        Resolution order: explicit ``__init__`` override → live
+        ``settings.mlx_model_path``.  Reads ``settings`` on every access so a
+        UI change in Rules → AI-tool settings (or a programmatic
+        ``settings.update``) is picked up immediately — the previous
+        captured-at-init behaviour caused the well-known bug "UI и .env не
+        подхватывают изменение пути к модели".
+        """
+        return (self._override_path or settings.mlx_model_path or "").strip()
+
+    # Backwards compat — some older modules still read ``engine._model_path``.
+    @property
+    def _model_path(self) -> str:
+        return self.model_path
+
+    @property
+    def _loaded(self) -> bool:
+        """True when a model is loaded AND its path still matches settings."""
+        return (
+            self._model is not None
+            and self._loaded_from_path is not None
+            and self._loaded_from_path == self.model_path
+        )
+
+    def reload(self) -> None:
+        """Force a reload on the next ``_ensure_loaded`` call.
+
+        Call this after the user changes ``mlx_model_path`` (or any other
+        setting that affects model loading) so the new model is picked up
+        without restarting the server.  Releases the old model reference so
+        macOS can reclaim the GPU/RAM.
+        """
+        if self._loaded_from_path is not None:
+            logger.info(
+                f"[mlx] Releasing model loaded from {self._loaded_from_path}"
+            )
+        self._model = None
+        self._tokenizer = None
+        self._loaded_from_path = None
 
     # ------------------------------------------------------------------
     # Loading
@@ -305,6 +360,9 @@ class MLXEngine:
     )
 
     def _ensure_loaded(self) -> None:
+        # ``_loaded`` is now a property that also checks the path hasn't
+        # drifted from current settings, so we self-heal after the user
+        # changes ``mlx_model_path`` via the UI.
         if self._loaded:
             return
 
@@ -316,19 +374,30 @@ class MLXEngine:
             if not MLXEngine._mlx_available:
                 raise RuntimeError(self._UNAVAILABLE_MSG)
 
-            if not self._model_path:
+            current_path = self.model_path  # live read of settings
+            if not current_path:
                 raise RuntimeError(
                     "MLX model path is not set. "
-                    "Add PA_MLX_MODEL_PATH=/path/to/model to your .env file.\n"
-                    "Download models: https://huggingface.co/mlx-community"
+                    "Configure it via the WebUI (Правила → Инструменты ИИ) "
+                    "or via PA_MLX_MODEL_PATH in .env."
                 )
 
-            path = Path(self._model_path)
+            path = Path(current_path)
             if not path.exists():
                 raise RuntimeError(f"Model path does not exist: {path}")
 
             if sys.platform != "darwin":
                 raise RuntimeError("MLX requires macOS (Apple Silicon).")
+
+            # If a previous model is loaded but the path drifted, release
+            # it before loading the new one so MLX-stream memory is freed.
+            if self._model is not None and self._loaded_from_path != current_path:
+                logger.info(
+                    f"[mlx] Path changed: {self._loaded_from_path} → "
+                    f"{current_path}. Releasing old model."
+                )
+                self._model = None
+                self._tokenizer = None
 
             logger.info(f"Loading MLX model from {path} …")
             t0 = time.time()
@@ -345,16 +414,17 @@ class MLXEngine:
                 MLXEngine._mlx_available = False
                 raise RuntimeError(self._UNAVAILABLE_MSG)
 
-            self._loaded = True
+            self._loaded_from_path = current_path
             logger.info(f"Model loaded in {time.time() - t0:.1f}s")
 
     @property
     def is_loaded(self) -> bool:
-        return self._loaded
+        return self._loaded  # property — checks model + path drift
 
     @property
     def model_name(self) -> str:
-        return Path(self._model_path).name if self._model_path else "not configured"
+        p = self.model_path
+        return Path(p).name if p else "not configured"
 
     # ------------------------------------------------------------------
     # Raw generation

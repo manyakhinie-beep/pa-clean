@@ -35,9 +35,17 @@ def get_rules_settings() -> dict[str, Any]:
 
 @router.patch("/settings")
 def patch_rules_settings(body: dict[str, Any]) -> dict[str, Any]:
-    """Validate a partial update, persist it to ``config.json``, apply it now."""
+    """Validate a partial update, persist it to ``config.json``, apply it now.
+
+    Side effect: when ``mlx_model_path`` changes, the shared MLXEngine is
+    asked to drop its cached model so the next chat / draft / delegate
+    request loads the new one.  Previously the engine cached the path at
+    construction and ignored later updates — the reported bug «UI и .env
+    не подхватывают изменение пути к модели».
+    """
     if not isinstance(body, dict) or not body:
         raise HTTPException(status_code=400, detail="Empty or invalid settings payload")
+    old_mlx_path = settings.mlx_model_path
     try:
         updated = settings.update(body)
     except KeyError as exc:
@@ -45,5 +53,20 @@ def patch_rules_settings(body: dict[str, Any]) -> dict[str, Any]:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    logger.info(f"[rules] AI-tool settings updated: {sorted(body)}")
-    return {"ok": True, "settings": updated}
+    new_mlx_path = settings.mlx_model_path
+    model_reloaded = False
+    if "mlx_model_path" in body and old_mlx_path != new_mlx_path:
+        try:
+            from personal_assistant.mlx_server import server as _srv
+            engine = getattr(_srv.state, "engine", None)
+            if engine is not None and hasattr(engine, "reload"):
+                engine.reload()
+                model_reloaded = True
+        except Exception as exc:  # noqa: BLE001 — never fail settings on engine
+            logger.warning(f"[rules] MLX engine reload failed: {exc}")
+
+    logger.info(
+        f"[rules] AI-tool settings updated: {sorted(body)} "
+        f"(mlx_reload={model_reloaded})"
+    )
+    return {"ok": True, "settings": updated, "mlx_reloaded": model_reloaded}

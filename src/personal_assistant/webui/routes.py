@@ -906,24 +906,74 @@ _ENV_KEY_MAP = {
 
 @router.post("/settings")
 async def save_settings(update: SettingsUpdate):
-    """Сохранить настройки в .env (python-dotenv set_key)."""
+    """Сохранить настройки в ``.env`` И применить к живому объекту settings.
+
+    Ранее ручка только писала в ``.env`` через ``set_key`` и сообщала
+    «применятся после перезапуска» — это ломало UI-сценарий смены
+    ``mlx_model_path``: пользователь меняет путь, видит «saved», а
+    инференс продолжает грузиться со старого. Теперь:
+
+      1. Пишем в ``.env`` (сохраняется на следующий запуск).
+      2. Применяем к ``settings`` через ``setattr`` (живой процесс
+         видит новое значение немедленно).
+      3. Если поменялся ``mlx_model_path`` — сбрасываем MLXEngine,
+         чтобы следующий /chat использовал новую модель.
+    """
     from dotenv import set_key
+    from personal_assistant.config import settings as live_cfg
 
     env_file = _ENV_FILE
     if not env_file.exists():
         env_file.touch()
 
+    old_mlx = live_cfg.mlx_model_path
     saved: dict = {}
     for field, env_key in _ENV_KEY_MAP.items():
         value = getattr(update, field)
-        if value is not None:
-            set_key(str(env_file), env_key, str(value))
-            saved[field] = value
+        if value is None:
+            continue
+        # Persist to .env so the value survives a restart
+        set_key(str(env_file), env_key, str(value))
+        saved[field] = value
+        # Apply to the live settings instance.  We bypass settings.update()
+        # because not every key in _ENV_KEY_MAP is in EDITABLE_FIELDS
+        # (e.g. vault_path, log_level) — direct setattr keeps it simple.
+        if hasattr(live_cfg, field):
+            try:
+                # Cast obvious numeric / bool types
+                current = getattr(live_cfg, field)
+                if isinstance(current, bool):
+                    coerced: Any = value if isinstance(value, bool) else (str(value).lower() in ("1","true","yes","on"))
+                elif isinstance(current, int) and not isinstance(current, bool):
+                    coerced = int(value)
+                elif isinstance(current, float):
+                    coerced = float(value)
+                else:
+                    coerced = value
+                setattr(live_cfg, field, coerced)
+            except Exception:
+                pass  # malformed input — .env still gets it for restart
+
+    # If mlx_model_path actually changed — drop the engine's cached model.
+    mlx_reloaded = False
+    if "mlx_model_path" in saved and saved["mlx_model_path"] != old_mlx:
+        try:
+            from personal_assistant.mlx_server import server as _srv
+            engine = getattr(_srv.state, "engine", None)
+            if engine is not None and hasattr(engine, "reload"):
+                engine.reload()
+                mlx_reloaded = True
+        except Exception:  # noqa: BLE001 — never fail settings on engine
+            pass
 
     return {
         "status": "ok",
         "saved": saved,
-        "note": "Настройки модели/vault применятся после перезапуска сервера",
+        "mlx_reloaded": mlx_reloaded,
+        "note": (
+            "Настройки сохранены в .env и применены к текущему процессу. "
+            "vault_path и log_level всё ещё требуют перезапуска для полного эффекта."
+        ),
     }
 
 
