@@ -305,9 +305,14 @@ function initGtdRules(ctx) {
         <button class="btn btn--sm btn--secondary" data-delete="${idx}" style="flex:0;color:#ef4444;border-color:#ef4444">✕</button>
       `;
       row.querySelectorAll('[data-field]').forEach(el => {
-        el.addEventListener('input', () => {
+        // ``<select>`` иногда не диспатчит ``input`` в старых WebKit —
+        // слушаем оба события, чтобы выбор «Срок: На этой неделе» точно
+        // попадал в gtdRules[idx].deadline_horizon до клика «Применить».
+        const sync = () => {
           gtdRules[parseInt(el.dataset.idx)][el.dataset.field] = el.value;
-        });
+        };
+        el.addEventListener('input', sync);
+        el.addEventListener('change', sync);
       });
       row.querySelector(`[data-pick-quadrant="${idx}"]`)?.addEventListener('click', () => {
         showQuadrantPicker(key => { gtdRules[idx].quadrant = key; renderGtdRules(); });

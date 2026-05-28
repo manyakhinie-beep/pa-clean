@@ -2823,6 +2823,12 @@ class RuleBody(BaseModel):
     priority: int = 100
     tags: list = []
     enabled: bool = True
+    # Окно сроков, в которое должен попадать deadline письма для срабатывания
+    # правила.  Допустимые значения см. в ``deadline_extractor.DEADLINE_HORIZONS``.
+    # До этого поля Pydantic молча отбрасывал ``deadline_horizon`` из тела
+    # запроса, и UI-выбор «Срок: На этой неделе» терялся при сохранении —
+    # колонка визуально оставалась в дефолте «Любой».
+    deadline_horizon: str = "any"
 
 
 @router.get("/rules")
