@@ -13,6 +13,7 @@ from loguru import logger
 
 from personal_assistant.mlx_server.engine import MLXEngine
 from personal_assistant.mlx_server.vault_index import VaultDoc, VaultIndex
+from personal_assistant.services.date_anchors import build_date_anchor_block
 from personal_assistant.services.tool_prompts import get_tool_prompts
 
 # ---------------------------------------------------------------------------
@@ -107,7 +108,14 @@ def draft_reply(
     instructions_block += f"Тон: {tone}"
 
     context = index.build_context([doc], max_chars=4_000)
-    prompt = _DRAFT_PROMPT.format(
+    # Date anchors — pre-compute «сегодня / дата письма / срок» so the
+    # model uses them verbatim instead of computing «через 2 недели» on
+    # its own (the classic source of hallucinated dates in drafts).
+    anchors = build_date_anchor_block(
+        email_date=getattr(doc, "date", None),
+        email_text=getattr(doc, "content", None),
+    )
+    prompt = anchors + _DRAFT_PROMPT.format(
         instructions_block=instructions_block,
         context=context,
     )

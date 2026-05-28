@@ -11,6 +11,7 @@ from loguru import logger
 
 from personal_assistant.mlx_server.engine import MLXEngine
 from personal_assistant.mlx_server.vault_index import VaultDoc, VaultIndex
+from personal_assistant.services.date_anchors import build_date_anchor_block
 from personal_assistant.services.tool_prompts import get_tool_prompts
 
 
@@ -65,7 +66,16 @@ def summarize_docs(
     logger.info(f"Summarizing {len(docs)} docs on topic: {topic!r}")
 
     context = index.build_context(docs, max_chars=8_000)
-    prompt = _SUMMARIZE_PROMPT.format(n=len(docs), context=context)
+    # Pre-compute date anchors so the LLM doesn't have to guess.
+    # Uses the latest doc's date as «дата письма» (newest by sort below
+    # is what the user is asking about); ``date_anchors`` runs the same
+    # ``deadline_extractor`` we use server-side, so model and code agree.
+    anchor_doc = max(docs, key=lambda d: d.date or "", default=None)
+    anchors = build_date_anchor_block(
+        email_date=getattr(anchor_doc, "date", None) if anchor_doc else None,
+        email_text=getattr(anchor_doc, "content", None) if anchor_doc else None,
+    )
+    prompt = anchors + _SUMMARIZE_PROMPT.format(n=len(docs), context=context)
 
     summary = engine.ask(
         question=prompt,
@@ -113,7 +123,14 @@ def summarize_thread(
     docs.sort(key=lambda d: d.date or "")
 
     context = index.build_context(docs, max_chars=8_000)
-    prompt = _THREAD_PROMPT.format(topic=topic, context=context)
+    # Inject date anchors based on the LATEST email in the thread —
+    # docs are already sorted by date ASC above, so [-1] is freshest.
+    latest = docs[-1] if docs else None
+    anchors = build_date_anchor_block(
+        email_date=getattr(latest, "date", None) if latest else None,
+        email_text=getattr(latest, "content", None) if latest else None,
+    )
+    prompt = anchors + _THREAD_PROMPT.format(topic=topic, context=context)
 
     summary = engine.ask(
         question=prompt,

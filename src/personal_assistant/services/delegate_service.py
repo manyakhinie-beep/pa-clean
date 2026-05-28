@@ -345,6 +345,16 @@ def _build_intro_mlx(
     # Keep the body short — Qwen-7B handles ~1500-2000 chars of context well.
     body_snippet = preview[:1500]
 
+    # Pre-computed date anchors — delegate is one-shot, no tool calling,
+    # so the model would otherwise hallucinate dates for «через 2 недели»
+    # and friends.  We resolve them server-side via the same
+    # ``deadline_extractor`` chat-mode date_calc trusts.
+    from personal_assistant.services.date_anchors import build_date_anchor_block
+    anchors = build_date_anchor_block(
+        email_date=str(item.get("date") or "") or None,
+        email_text=f"{subject}\n\n{body_snippet}",
+    )
+
     role_suffix = f" ({contact.role})" if contact.role else ""
     note_block = (
         f"\n\n## Заметка от руководителя\n{user_note.strip()}"
@@ -353,7 +363,8 @@ def _build_intro_mlx(
     )
 
     prompt = (
-        f"## Руководитель (пользователь ассистента)\n"
+        anchors
+        + f"## Руководитель (пользователь ассистента)\n"
         f"Имя: {manager.full_name or '—'}\n"
         f"Email: {manager.email or '—'}\n\n"
         f"## Сотрудник для делегирования\n"
