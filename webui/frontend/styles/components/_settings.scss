@@ -197,9 +197,9 @@
     font-size: $size-xs;
     font-weight: $fw-medium;
 
-    &--ok      { background: $sber-success-light; color: $sber-primary; }
-    &--error   { background: $sber-danger-light;  color: $sber-danger;  }
-    &--warning { background: $sber-warning-light; color: $sber-warning; }
+    &--ok      { background: $brand-success-light; color: $brand-primary; }
+    &--error   { background: $brand-danger-light;  color: $brand-danger;  }
+    &--warning { background: $brand-warning-light; color: $brand-warning; }
   }
 
   // ── Eisenhower 2x2 matrix ──────────────────────────────────────────────

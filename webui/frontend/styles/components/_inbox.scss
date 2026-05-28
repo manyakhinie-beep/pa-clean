@@ -687,12 +687,12 @@
   }
 
   &--urgent {
-    border-left-color: $sber-danger;
+    border-left-color: $brand-danger;
   }
   &--active.ib-item--urgent {
     background: #FFF5F5;
-    border-left-color: $sber-danger;
-    .ib-item-sender { color: $sber-danger; }
+    border-left-color: $brand-danger;
+    .ib-item-sender { color: $brand-danger; }
   }
 
   // Read state — soften everything, not just colour, so the eye skims past.

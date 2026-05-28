@@ -333,7 +333,7 @@
 
     &:hover { background: var(--color-bg); color: var(--color-text); border-color: var(--color-text-muted); }
 
-    &--danger:hover { background: $sber-danger-light; color: var(--danger); border-color: var(--danger); }
+    &--danger:hover { background: $brand-danger-light; color: var(--danger); border-color: var(--danger); }
   }
 
   // ── Progress ──────────────────────────────────────────────────────────
@@ -476,7 +476,7 @@
       border-radius: $r-sm;
       flex-shrink: 0;
 
-      &:hover { background: $sber-danger-light; }
+      &:hover { background: $brand-danger-light; }
     }
   }
 

@@ -1,26 +1,26 @@
 // =============================================================================
-// Sber Brandbook Design Tokens
+// Design Tokens
 // =============================================================================
 
 // --- Brand colours ---
-$sber-primary:       #21A038;
-$sber-primary-hover: #1B8A30;
-$sber-primary-light: #E8F5EC;
-$sber-dark:          #1A1A1A;
-$sber-gray:          #6B7280;
-$sber-gray-light:    #9CA3AF;
-$sber-light-bg:      #F7F8FA;
-$sber-surface:       #FFFFFF;
-$sber-border:        #E5E7EB;
-$sber-border-focus:  #21A038;
-$sber-danger:        #E53935;
-$sber-danger-light:  #FFEBEE;
-$sber-warning:       #FFA000;
-$sber-warning-light: #FFF8E1;
-$sber-info:          #2196F3;
-$sber-info-light:    #E3F2FD;
-$sber-success:       #21A038;
-$sber-success-light: #E8F5EC;
+$brand-primary:       #21A038;
+$brand-primary-hover: #1B8A30;
+$brand-primary-light: #E8F5EC;
+$brand-dark:          #1A1A1A;
+$brand-gray:          #6B7280;
+$brand-gray-light:    #9CA3AF;
+$brand-light-bg:      #F7F8FA;
+$brand-surface:       #FFFFFF;
+$brand-border:        #E5E7EB;
+$brand-border-focus:  #21A038;
+$brand-danger:        #E53935;
+$brand-danger-light:  #FFEBEE;
+$brand-warning:       #FFA000;
+$brand-warning-light: #FFF8E1;
+$brand-info:          #2196F3;
+$brand-info-light:    #E3F2FD;
+$brand-success:       #21A038;
+$brand-success-light: #E8F5EC;
 
 // --- Neutrals scale ---
 $gray-50:  #F9FAFB;
@@ -96,38 +96,38 @@ $z-toast:     600;
 // CSS custom properties (runtime-switchable for dark mode)
 // =============================================================================
 :root {
-  --primary:          #{$sber-primary};
-  --primary-hover:    #{$sber-primary-hover};
-  --primary-light:    #{$sber-primary-light};
+  --primary:          #{$brand-primary};
+  --primary-hover:    #{$brand-primary-hover};
+  --primary-light:    #{$brand-primary-light};
   // UX-FIX CSS-1: --primary-dark was used in _projects.scss but undefined
-  --primary-dark:     #{$sber-primary-hover};
-  --danger:           #{$sber-danger};
-  --warning:          #{$sber-warning};
-  --info:             #{$sber-info};
+  --primary-dark:     #{$brand-primary-hover};
+  --danger:           #{$brand-danger};
+  --warning:          #{$brand-warning};
+  --info:             #{$brand-info};
 
-  --color-bg:         #{$sber-light-bg};
-  --color-surface:    #{$sber-surface};
-  --color-border:     #{$sber-border};
+  --color-bg:         #{$brand-light-bg};
+  --color-surface:    #{$brand-surface};
+  --color-border:     #{$brand-border};
   --color-text:       #{$gray-800};
   --color-text-muted: #{$gray-500};
   --color-text-faint: #{$gray-400};
-  --color-nav-bg:     #{$sber-surface};
-  --color-nav-active: #{$sber-primary-light};
+  --color-nav-bg:     #{$brand-surface};
+  --color-nav-active: #{$brand-primary-light};
 
   // UX-FIX CSS-1: aliases used in component SCSS but missing from :root
   // These were defined in the old webui/scss/_variables.scss and were not ported
-  --color-primary:         #{$sber-primary};
+  --color-primary:         #{$brand-primary};
   --color-primary-rgb:     33, 160, 56;      // RGB of #21A038 — used in rgba()
-  --color-accent:          #{$sber-primary};
-  --color-accent-subtle:   #{$sber-primary-light};
+  --color-accent:          #{$brand-primary};
+  --color-accent-subtle:   #{$brand-primary-light};
   --color-hover:           #{$gray-100};     // subtle hover background
   --color-bg-hover:        #{$gray-100};
   --color-bg-subtle:       #{$gray-50};
-  --color-bg-sidebar:      #{$sber-surface};
+  --color-bg-sidebar:      #{$brand-surface};
   --color-text-secondary:  #{$gray-600};     // slightly darker than muted
-  --color-warn:            #{$sber-warning};
+  --color-warn:            #{$brand-warning};
   --color-surface-alt:     #{$gray-50};      // cards, alternate row
-  --color-surface-raised:  #{$sber-surface}; // elevated surfaces (dropdowns)
+  --color-surface-raised:  #{$brand-surface}; // elevated surfaces (dropdowns)
 
   --shadow-sm: #{$shadow-sm};
   --shadow-md: #{$shadow-md};

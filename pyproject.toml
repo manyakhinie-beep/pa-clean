@@ -48,8 +48,8 @@ packages = ["src/personal_assistant"]
 
 [dependency-groups]
 # Default dev tools — НЕ включает pytest-cov: некоторые корпоративные PyPI-прокси
-# (например sberosc) блокируют свежие версии `coverage`. Хотите отчёт о
-# покрытии — установите ad-hoc: ``uv sync --group cov`` или
+# блокируют свежие версии `coverage`. Хотите отчёт о покрытии — установите
+# ad-hoc: ``uv sync --group cov`` или
 # ``uv run --with pytest-cov pytest --cov=src``.
 dev = [
     "pytest>=8.0",

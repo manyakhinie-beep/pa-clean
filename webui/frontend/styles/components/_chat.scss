@@ -419,7 +419,7 @@
 
     code:not(pre code) {
       background: $gray-100;
-      color: $sber-danger;
+      color: $brand-danger;
       padding: 1px 5px;
       border-radius: $r-sm;
     }
@@ -440,7 +440,7 @@
       cursor: pointer;
       transition: background $t;
 
-      &:hover { background: color.scale($sber-primary-light, $lightness: -5%); }
+      &:hover { background: color.scale($brand-primary-light, $lightness: -5%); }
     }
   }
 
@@ -503,7 +503,7 @@
       background: var(--primary-light);
 
       &:hover {
-        background: color.scale($sber-primary-light, $lightness: -6%);
+        background: color.scale($brand-primary-light, $lightness: -6%);
         border-color: var(--primary);
       }
     }
@@ -720,7 +720,7 @@
     }
 
     &--danger {
-      &:hover { background: $sber-danger-light; color: $sber-danger; }
+      &:hover { background: $brand-danger-light; color: $brand-danger; }
     }
 
     &--muted { opacity: .6; }
