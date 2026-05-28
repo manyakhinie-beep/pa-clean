@@ -68,33 +68,77 @@ _SKIP_MAILBOXES: set[str] = {
 # Mail.app's ``every mailbox of acct`` does NOT recursively enumerate
 # nested mailboxes on all account types — IMAP accounts with deep folder
 # trees (e.g. ``Inbox/Архив/2024/Январь``) silently skip the inner
-# levels.  We walk the tree explicitly via ``my listRecurse`` so every
-# nested mailbox is listed.  Mail.app sometimes also flattens, so the
-# Python side dedupes by ``(account, leaf_name)`` to keep behaviour
-# stable across macOS versions.
+# levels.  We walk the tree explicitly with an in-place BFS queue.
+#
+# Why BFS-in-tell and not a recursive handler:  a top-level handler
+# referencing ``every mailbox of mb`` lives OUTSIDE the
+# ``tell application "Mail"`` block, and AppleScript's parser treats
+# ``mailbox`` as a plain identifier — emitting error -2741
+# («expected class name, got identifier»).  Putting the whole walk
+# inside the tell block sidesteps the scope issue without needing
+# script-object gymnastics, and stays readable.
+#
+# Mail.app sometimes also flat-enumerates (the same mailbox appears at
+# top level AND as a child of its parent).  The Python side dedupes by
+# ``(account, leaf_name)`` to keep behaviour stable across macOS
+# versions.
 _LIST_MAILBOXES_SCRIPT = """\
-on listRecurse(acctName, mboxList, prefix)
-    global result_lines
-    repeat with mb in mboxList
-        try
-            set mbName to name of mb as string
-            set fullPath to prefix & mbName
-            set end of result_lines to acctName & "|||" & fullPath
-            try
-                my listRecurse(acctName, every mailbox of mb, fullPath & "/")
-            end try
-        end try
-    end repeat
-end listRecurse
-
-global result_lines
-set result_lines to {}
 tell application "Mail"
+    set result_lines to {}
     repeat with acct in every account
         set acctName to name of acct as string
+        -- Work queue: each entry is {mailbox_ref, path_prefix_string}.
+        -- Seeded with all top-level mailboxes; we pop from the end
+        -- (DFS — order doesn't matter, the Python side dedupes).
+        set work to {}
         try
-            my listRecurse(acctName, every mailbox of acct, "")
+            repeat with mb in (every mailbox of acct)
+                set end of work to {mb, ""}
+            end repeat
         end try
+        repeat while (count of work) > 0
+            set entry to item -1 of work
+            if (count of work) > 1 then
+                set work to items 1 thru -2 of work
+            else
+                set work to {}
+            end if
+            set mb to item 1 of entry
+            set prefix to item 2 of entry
+            try
+                set mbName to (name of mb) as string
+                set fullPath to prefix & mbName
+                set end of result_lines to acctName & "|||" & fullPath
+                try
+                    set children to (every mailbox of mb)
+                    repeat with child in children
+                        set end of work to {child, fullPath & "/"}
+                    end repeat
+                end try
+            end try
+        end repeat
+    end repeat
+end tell
+set AppleScript's text item delimiters to "\n"
+set output to result_lines as string
+set AppleScript's text item delimiters to ""
+return output
+"""
+
+# Last-resort fallback if the recursive listing errors out for any
+# reason (Mail.app reference quirks on unusual account types, AppleScript
+# parser regressions in new macOS).  Returns ONLY top-level mailboxes —
+# matches the legacy pre-A+B behaviour, so worst case we degrade to
+# what was working before the recursion change.
+_LIST_MAILBOXES_SCRIPT_FLAT = """\
+tell application "Mail"
+    set result_lines to {}
+    repeat with acct in every account
+        set acctName to name of acct as string
+        repeat with mbox in every mailbox of acct
+            set mboxName to name of mbox as string
+            set end of result_lines to acctName & "|||" & mboxName
+        end repeat
     end repeat
 end tell
 set AppleScript's text item delimiters to "\n"
@@ -510,12 +554,28 @@ class MailReader:
         some macOS versions already flat-enumerates and we'd otherwise
         emit duplicates after my explicit recursion.
 
+        Fallback: if the recursive script errors out (older Mail.app
+        builds, unusual account types triggering AppleScript -2741),
+        we degrade to the legacy flat listing — same behaviour as
+        before the recursion change, so subscriber accounts never
+        regress to "0 mailboxes" because of a parser quirk.
+
         Limitation: two siblings with the same leaf name in different
         parents collapse into one bucket here.  Acceptable trade-off —
         the alternative is rewriting the fetch script to walk paths,
         which is invasive and rarely needed in practice.
         """
-        raw = run_applescript(_LIST_MAILBOXES_SCRIPT, timeout=15)
+        try:
+            raw = run_applescript(_LIST_MAILBOXES_SCRIPT, timeout=15)
+        except RuntimeError as exc:
+            # Recursive walk failed (typically AppleScript -2741 on edge
+            # cases).  Fall back to the legacy flat listing so the user
+            # at least sees top-level mailboxes — better than zero.
+            logger.warning(
+                f"[mail] Recursive mailbox listing failed ({exc}); "
+                "falling back to flat top-level listing."
+            )
+            raw = run_applescript(_LIST_MAILBOXES_SCRIPT_FLAT, timeout=15)
         result: list[dict] = []
         seen: set[tuple[str, str]] = set()
         for line in raw.splitlines():

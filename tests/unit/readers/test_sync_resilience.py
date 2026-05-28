@@ -209,6 +209,33 @@ class TestMailReaderResilience:
             r.fetch_messages(days_back=1)
         assert "stale" not in r.last_report
 
+    def test_fallback_to_flat_listing_when_recursive_fails(self):
+        """If the recursive AppleScript errors out (e.g. -2741 «expected
+        class name, got identifier» on edge-case accounts), MailReader
+        falls back to the legacy flat listing — top-level mailboxes
+        still show up, no «0 mailboxes» regression."""
+        # First call (recursive script): error.  Second call (flat
+        # fallback): success.  Then the fetch script for that one mailbox.
+        side_effects = [
+            # Recursive fails
+            MagicMock(stdout="", returncode=1, stderr="execution error: -2741"),
+            # Flat fallback succeeds
+            MagicMock(stdout=_mbox_list(("Work", "INBOX")), returncode=0, stderr=""),
+            # Per-mailbox fetch
+            MagicMock(stdout=json.dumps([_MIN_MAIL]), returncode=0, stderr=""),
+        ]
+        with patch("sys.platform", "darwin"), patch(
+            "subprocess.run", side_effect=side_effects
+        ):
+            from personal_assistant.readers.mail_reader import MailReader
+
+            r = MailReader()
+            msgs = r.fetch_messages(days_back=1)
+
+        # Fallback path returned a mailbox → message came through
+        assert len(msgs) == 1
+        assert "Work/INBOX" in r.last_report
+
 
 # ----------------------------------------------------------------------
 # CalendarReader: same surface
