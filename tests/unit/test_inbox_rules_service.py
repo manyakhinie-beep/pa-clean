@@ -350,3 +350,82 @@ def test_load_gtd_rules_missing_file(tmp_path, monkeypatch):
         lambda: tmp_path,
     )
     assert load_gtd_rules() == []
+
+
+# ----------------------------------------------------------------------
+# Regression: keywords must match against the email *body*, not just the
+# 180-char preview.  Reported by the user as «добавление в Правила и
+# применение сейчас не работает» — long emails where the keyword sits in
+# paragraph 2+ never triggered the rule.
+# ----------------------------------------------------------------------
+
+
+def test_structured_rule_matches_keyword_in_body():
+    rule = Rule(
+        name="Финансы",
+        keywords=["счёт"],
+        eisenhower_quadrant=EisenhowerQuadrant.Q1,
+        action_type=ActionType.EXECUTE,
+    )
+    # Preview deliberately does NOT contain the keyword.
+    it = _item(
+        subject="Финансовый отчёт",
+        preview="Здравствуйте, направляю отчёт за май.",
+        body=(
+            "Здравствуйте, направляю отчёт за май.\n\n"
+            "В приложении вы найдёте счёт на оплату услуг по договору № 1234.\n"
+            "Срок оплаты — 5 рабочих дней."
+        ),
+    )
+    apply_rules_to_item(it, [rule], [])
+    assert it["is_urgent"] is True
+    assert it["is_important"] is True
+
+
+def test_gtd_rule_matches_keyword_in_body():
+    gtd = [{"id": "g1", "keyword": "договор", "action": "ответить", "quadrant": "q2"}]
+    it = _item(
+        subject="Документы",
+        preview="Прилагаю необходимые материалы.",
+        body=(
+            "Прилагаю необходимые материалы.\n"
+            "Прошу подписать договор и вернуть скан до конца недели."
+        ),
+    )
+    apply_rules_to_item(it, [], gtd)
+    assert it["is_important"] is True
+    assert it["followup_needed"] is True
+
+
+def test_body_truncated_to_scan_limit():
+    """Keywords past ~4 KB of body are intentionally ignored to keep the
+    in-memory scan bounded on very large MIME blobs."""
+    from personal_assistant.services.inbox_rules_service import _BODY_SCAN_LIMIT
+
+    rule = Rule(
+        name="Late keyword",
+        keywords=["налоги"],
+        eisenhower_quadrant=EisenhowerQuadrant.Q1,
+    )
+    padding = "x" * (_BODY_SCAN_LIMIT + 200)
+    it = _item(subject="Привет", preview="нет совпадения", body=padding + " налоги")
+    apply_rules_to_item(it, [rule], [])
+    # Keyword sits after the scan limit → must NOT match.
+    assert it["is_urgent"] is False
+    assert it["is_important"] is False
+
+
+def test_body_keyword_within_scan_limit_matches():
+    from personal_assistant.services.inbox_rules_service import _BODY_SCAN_LIMIT
+
+    rule = Rule(
+        name="Within limit",
+        keywords=["налоги"],
+        eisenhower_quadrant=EisenhowerQuadrant.Q1,
+    )
+    # Place the keyword JUST under the limit.
+    padding = "y" * (_BODY_SCAN_LIMIT - 20)
+    it = _item(subject="Привет", preview="нет совпадения", body=padding + " налоги")
+    apply_rules_to_item(it, [rule], [])
+    assert it["is_urgent"] is True
+    assert it["is_important"] is True

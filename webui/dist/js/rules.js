@@ -468,15 +468,33 @@ function initStructuredRules(ctx) {
     renderRules();
   });
 
-  // Save is wired to the main "Применить" button in GTD tab
+  // Save is wired to the main "Применить" button in GTD tab.
+  //
+  // After every structured rule is persisted we must broadcast
+  // ``pa:rules-changed`` so the Inbox tab re-fetches and re-applies the
+  // rule pipeline.  Without this dispatch the simple-GTD save (line ~320)
+  // would refresh the inbox, but a structured-rule save would silently
+  // leave stale tags on screen — which is exactly the bug the user
+  // reported: «добавление в Правила и применение сейчас не работает».
   document.getElementById('gtd-save-all-btn')?.addEventListener('click', async () => {
+    let allOk = true;
     for (const rule of rules) {
       try {
         if (rule.id) await api.rulesUpdate(rule.id, rule);
         else { const c = await api.rulesCreate(rule); rule.id = c.id; }
-      } catch (err) { console.error('[rules] save error:', err); }
+      } catch (err) {
+        allOk = false;
+        console.error('[rules] save error:', err);
+      }
     }
     await loadRules();
+    // Always notify — even on partial failure the persisted subset should
+    // be reflected in the Inbox immediately.
+    document.dispatchEvent(new Event('pa:rules-changed'));
+    document.dispatchEvent(new Event('pa:vault-reloaded'));
+    if (!allOk) {
+      try { window.PA?.showToast?.('Часть правил не сохранилась — см. консоль', 'error'); } catch {}
+    }
   }, { capture: false });
 
   loadRules();

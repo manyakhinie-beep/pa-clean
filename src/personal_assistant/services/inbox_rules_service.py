@@ -92,13 +92,31 @@ def load_gtd_rules() -> list[dict]:
     return [r for r in rules if isinstance(r, dict) and (r.get("keyword") or "").strip()]
 
 
+# Cap body inclusion so very large MIME blobs don't blow up keyword scanning.
+# 4 KB is enough for the first few paragraphs of a typical work email,
+# which is where the user-visible keywords usually appear.  Anything longer
+# is almost certainly quoted thread history or a signature/footer block.
+_BODY_SCAN_LIMIT = 4000
+
+
 def _item_text(item: dict) -> str:
-    """Build the searchable text blob the rule engine matches against."""
+    """Build the searchable text blob the rule engine matches against.
+
+    Previously only subject + sender + preview (≈180 chars) were scanned,
+    so a keyword like «счёт» that appeared further down in the body never
+    matched and the user saw «Правила не работают».  Including the body
+    (truncated to 4 KB) fixes the reported bug «добавление в Правила и
+    применение сейчас не работает» without making the scan unbounded.
+    """
+    body = item.get("body") or ""
+    if isinstance(body, str) and len(body) > _BODY_SCAN_LIMIT:
+        body = body[:_BODY_SCAN_LIMIT]
     parts = [
         item.get("subject") or "",
         item.get("sender_name") or "",
         item.get("sender_role") or "",
         item.get("preview") or item.get("body_preview") or "",
+        body,
     ]
     return " ".join(p for p in parts if p)
 
