@@ -250,6 +250,14 @@ class Settings:
         # Opt-in via PA_MAIL_FETCH_RAW_SOURCE=true. Default False keeps the
         # legacy fast path.
         self.mail_fetch_raw_source: bool = _env_bool("MAIL_FETCH_RAW_SOURCE", False)
+        # Whether to enumerate attachment filenames in the AppleScript pass.
+        # Default False — accessing ``mail attachments of msg`` forces
+        # Mail.app to download the message structure (and often the body)
+        # on IMAP accounts, which is the single biggest source of
+        # per-mailbox timeouts on heavy contact folders.  Enable via
+        # PA_MAIL_FETCH_ATTACHMENT_NAMES=true only if attachment names
+        # in the vault are genuinely needed downstream.
+        self.mail_fetch_attachment_names: bool = _env_bool("MAIL_FETCH_ATTACHMENT_NAMES", False)
         self.mail_fetch_attachments: bool = _env_bool("MAIL_FETCH_ATTACHMENTS", False)
         self.mail_attachments_path: str = _env(
             "MAIL_ATTACHMENTS_PATH",

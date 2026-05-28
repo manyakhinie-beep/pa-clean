@@ -756,6 +756,7 @@ def _run_sync_mail(vault_path: Path) -> dict:
         fetch_body=settings.mail_fetch_body,
         fetch_recipients=settings.mail_fetch_recipients,
         fetch_raw_source=settings.mail_fetch_raw_source,
+        fetch_attachment_names=settings.mail_fetch_attachment_names,
         since_per_mailbox=since_per_mailbox or None,
     )
     contacts = reader.extract_contacts(messages)
