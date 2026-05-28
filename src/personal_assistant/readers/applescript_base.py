@@ -101,7 +101,46 @@ AS_PREAMBLE = AS_ISO_DATE + AS_ESC + AS_JOIN + AS_MIN
 # ---------------------------------------------------------------------------
 
 
-def run_applescript(script: str, timeout: int = 180) -> str:
+# ---------------------------------------------------------------------------
+# Typed exceptions
+# ---------------------------------------------------------------------------
+# All subclasses inherit from ``RuntimeError`` so legacy ``except RuntimeError``
+# blocks continue to work — every existing caller that catches RuntimeError and
+# matches on the error text keeps functioning untouched.
+
+
+class AppleScriptError(RuntimeError):
+    """Base class for AppleScript / osascript failures."""
+
+
+class AppleScriptTimeout(AppleScriptError):
+    """osascript exceeded its timeout — eligible for retry."""
+
+
+class AppleScriptPermissionDenied(AppleScriptError):
+    """TCC / Automation permission denied (error 1743) — NOT retryable."""
+
+
+# Backoff schedule between transient-timeout retries.  Tuple length =
+# number of retries (default 2 → first retry after 2s, second after 8s).
+# Exposed as module constant so tests can monkeypatch.
+RETRY_BACKOFF_SECONDS: tuple[float, ...] = (2.0, 8.0)
+
+
+def _classify_error(stderr: str) -> type[AppleScriptError]:
+    err = (stderr or "").lower()
+    if "1743" in err or "not allowed" in err or "not authorised" in err or "not authorized" in err:
+        return AppleScriptPermissionDenied
+    return AppleScriptError
+
+
+def run_applescript(
+    script: str,
+    timeout: int = 180,
+    *,
+    retries: int = 2,
+    retry_on_timeout: bool = True,
+) -> str:
     """
     Execute *script* via osascript using a temp file.
 
@@ -116,45 +155,79 @@ def run_applescript(script: str, timeout: int = 180) -> str:
     2. Character-position reporting: file-based execution gives accurate
        LINE:COL positions in error messages, making debugging much easier.
 
+    Resilience:
+      * ``retries`` controls how many extra attempts we make on
+        ``subprocess.TimeoutExpired``. Default ``2`` → up to 3 total
+        attempts with backoff ``RETRY_BACKOFF_SECONDS``.
+      * Non-timeout errors (TCC denials, AppleScript compile errors)
+        are NEVER retried — they are deterministic and retrying just
+        wastes time.
+
     Returns stdout as a stripped string.
-    Raises RuntimeError on non-zero exit or timeout.
+
+    Raises ``AppleScriptTimeout`` after all retries are exhausted,
+    ``AppleScriptPermissionDenied`` on TCC errors, ``AppleScriptError``
+    otherwise. All subclass ``RuntimeError`` for backward compatibility
+    with existing call sites.
     """
+    import time as _time
+
     if sys.platform != "darwin":
-        raise RuntimeError("AppleScript is only available on macOS.")
+        raise AppleScriptError("AppleScript is only available on macOS.")
 
-    # Write the script to a temporary .applescript file encoded as UTF-8.
-    # NamedTemporaryFile with delete=False so we can pass the path to a
-    # separate subprocess; we clean up in the finally block.
-    tmp_path: Optional[str] = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            suffix=".applescript",
-            encoding="utf-8",
-            delete=False,
-        ) as tf:
-            tf.write(script)
-            tmp_path = tf.name
+    backoff = list(RETRY_BACKOFF_SECONDS)
+    # Number of attempts = 1 (initial) + retries (only on timeout)
+    max_attempts = max(1, retries + 1) if retry_on_timeout else 1
+    last_timeout_attempts = 0
 
-        result = subprocess.run(
-            ["osascript", tmp_path],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired:
-        raise RuntimeError(f"osascript timed out after {timeout}s")
-    finally:
-        if tmp_path:
-            try:
-                Path(tmp_path).unlink(missing_ok=True)
-            except OSError:
-                pass
+    for attempt in range(max_attempts):
+        # Each attempt uses its own temp file — keeps cleanup simple and
+        # avoids any chance of stale state if a previous run crashed.
+        tmp_path: Optional[str] = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                suffix=".applescript",
+                encoding="utf-8",
+                delete=False,
+            ) as tf:
+                tf.write(script)
+                tmp_path = tf.name
 
-    if result.returncode != 0:
-        raise RuntimeError(f"osascript error: {result.stderr.strip()}")
+            result = subprocess.run(
+                ["osascript", tmp_path],
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired:
+            last_timeout_attempts = attempt + 1
+            if attempt + 1 < max_attempts:
+                # Schedule next retry after backoff.  Use min(attempt, ...)
+                # so a longer-than-expected backoff list still works.
+                wait = backoff[min(attempt, len(backoff) - 1)] if backoff else 0
+                if wait > 0:
+                    _time.sleep(wait)
+                continue
+            raise AppleScriptTimeout(
+                f"osascript timed out after {timeout}s "
+                f"(attempts={last_timeout_attempts})"
+            )
+        finally:
+            if tmp_path:
+                try:
+                    Path(tmp_path).unlink(missing_ok=True)
+                except OSError:
+                    pass
 
-    return result.stdout.strip()
+        if result.returncode != 0:
+            err_cls = _classify_error(result.stderr)
+            raise err_cls(f"osascript error: {result.stderr.strip()}")
+
+        return result.stdout.strip()
+
+    # Unreachable — the loop either returns or raises — but keeps mypy happy.
+    raise AppleScriptError("osascript: no attempts made")
 
 
 # ---------------------------------------------------------------------------

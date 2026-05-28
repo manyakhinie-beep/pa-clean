@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from datetime import datetime, timezone
 from email.utils import parseaddr
 from typing import Optional
@@ -31,6 +32,8 @@ from loguru import logger
 from personal_assistant.models import Contact, MailMessage
 from personal_assistant.readers.applescript_base import (
     AS_PREAMBLE,
+    AppleScriptPermissionDenied,
+    AppleScriptTimeout,
     compute_thread_id,
     run_applescript,
     safe_str,
@@ -87,7 +90,7 @@ return output
 _FETCH_MBOX_SCRIPT = (
     AS_PREAMBLE
     + """\
-set startDate to (current date) - ({days_back} * days)
+set startDate to (current date) - {seconds_back}
 set maxMsgs   to {max_messages}
 set acctName  to "{acct_name_esc}"
 set mboxName  to "{mbox_name_esc}"
@@ -214,6 +217,31 @@ _RFC822_HEADER_RE = re.compile(
 )
 
 
+# Minimum window AppleScript is allowed to look back over.  Zero would
+# be a no-op (clock-skew risk), so we floor at 60 seconds — even on a
+# zero-overlap watermark we still scan the last minute for safety.
+_MIN_WINDOW_SECONDS = 60
+
+
+def _resolve_seconds_back(days_back: int, since: Optional[datetime]) -> int:
+    """Translate (``days_back``, ``since``) into the AppleScript window.
+
+    The reader always honours the configured ``days_back`` ceiling: a
+    too-eager watermark cannot read further back than the user wants.
+    A missing/future watermark falls back to the full ``days_back``
+    window — same behaviour as before A+B was added.
+    """
+    ceiling = max(_MIN_WINDOW_SECONDS, int(days_back) * 86_400)
+    if since is None:
+        return ceiling
+    if since.tzinfo is None:
+        since = since.replace(tzinfo=timezone.utc)
+    delta = (datetime.now(tz=timezone.utc) - since).total_seconds()
+    # delta < 0 → watermark in the future (clock skew); treat as fresh.
+    seconds = int(max(_MIN_WINDOW_SECONDS, delta))
+    return min(seconds, ceiling)
+
+
 def _looks_like_rfc822(text: str) -> bool:
     """Cheap heuristic: does *text* look like an RFC822 source dump?
 
@@ -271,12 +299,28 @@ class MailReader:
 
     Splits work into per-mailbox AppleScript calls so one slow mailbox
     (e.g. a huge IMAP folder) cannot block all others.
+
+    Per-run telemetry is exposed as ``self.last_report`` after every
+    :meth:`fetch_messages` call:
+
+        {
+          "iCloud/INBOX": {"ok": True,  "count": 12, "error": "",       "duration_s": 4.2},
+          "Work/Big":     {"ok": False, "count": 0,  "error": "timeout", "duration_s": 45.0},
+        }
+
+    Consumers (orchestrator in ``mlx_server/server.py``) read this to
+    write per-bucket watermarks via ``services.sync_state``.
     """
 
     # Per-mailbox timeout in seconds.
     PER_MBOX_TIMEOUT: int = 45
     # Max messages fetched per mailbox per sync.
     DEFAULT_MAX_MESSAGES: int = 100
+
+    def __init__(self) -> None:
+        # Populated by fetch_messages — see class docstring for shape.
+        self.last_report: dict[str, dict] = {}
+        self._fetch_raw_source: bool = False
 
     def fetch_messages(
         self,
@@ -286,6 +330,8 @@ class MailReader:
         fetch_recipients: bool = False,
         fetch_raw_source: bool = False,
         skip_mailboxes: Optional[set[str]] = None,
+        since: Optional[datetime] = None,
+        since_per_mailbox: Optional[dict[str, datetime]] = None,
     ) -> list[MailMessage]:
         """Fetch messages received in the last *days_back* days.
 
@@ -305,8 +351,18 @@ class MailReader:
                 payload per message → slower sync.  Enable with
                 ``PA_MAIL_FETCH_RAW_SOURCE=true``.
             skip_mailboxes: extra folder names to skip (merged with defaults).
+            since: when provided, fetch only messages received after this
+                timestamp.  Combined with ``days_back`` as a min() so the
+                actual window never exceeds the configured limit, never
+                goes below a 60s floor (avoids zero-second windows on
+                back-to-back syncs).  This is the watermark hook used by
+                incremental sync.
+            since_per_mailbox: per-mailbox watermarks keyed by ``"account/mailbox"``;
+                takes precedence over the global ``since`` when present.
         """
         skip = _SKIP_MAILBOXES | (skip_mailboxes or set())
+        # Reset telemetry for this run
+        self.last_report = {}
 
         # Step 1 — list mailboxes
         try:
@@ -342,27 +398,56 @@ class MailReader:
             f"raw_source={'on' if fetch_raw_source else 'off'})"
         )
 
-        # Step 3 — fetch per mailbox
+        # Step 3 — fetch per mailbox.  A failure in one mailbox is isolated
+        # (returns [] and is logged into ``self.last_report``) so it never
+        # blocks the rest — this is the «B: skip-on-fail» half of A+B.
         all_messages: list[MailMessage] = []
         seen_ids: set[str] = set()  # deduplicate across nested mailboxes
 
         for mb in wanted:
-            msgs = self._fetch_one_mailbox(
+            mb_key = f"{mb['account']}/{mb['mailbox']}"
+            # Pick the most specific watermark available for this mailbox.
+            mb_since = None
+            if since_per_mailbox and mb_key in since_per_mailbox:
+                mb_since = since_per_mailbox[mb_key]
+            elif since is not None:
+                mb_since = since
+            seconds_back = _resolve_seconds_back(days_back, mb_since)
+
+            started = time.monotonic()
+            msgs, err = self._fetch_one_mailbox(
                 acct_name=mb["account"],
                 mbox_name=mb["mailbox"],
-                days_back=days_back,
+                seconds_back=seconds_back,
                 max_messages=max_messages_per_mailbox,
                 fetch_body=fetch_body,
                 fetch_recipients=fetch_recipients,
                 fetch_raw_source=fetch_raw_source,
             )
+            duration = round(time.monotonic() - started, 2)
+
+            new_count = 0
             for msg in msgs:
                 if msg.message_id and msg.message_id in seen_ids:
                     continue
                 seen_ids.add(msg.message_id)
                 all_messages.append(msg)
+                new_count += 1
 
-        logger.info(f"[mail] Total messages fetched: {len(all_messages)}")
+            self.last_report[mb_key] = {
+                "ok": err is None,
+                "count": new_count,
+                "error": err or "",
+                "duration_s": duration,
+                "since": mb_since.isoformat() if mb_since else "",
+            }
+
+        ok = sum(1 for r in self.last_report.values() if r["ok"])
+        fail = len(self.last_report) - ok
+        logger.info(
+            f"[mail] Total messages fetched: {len(all_messages)} "
+            f"(mailboxes ok={ok}, failed={fail})"
+        )
         return all_messages
 
     # ------------------------------------------------------------------
@@ -392,13 +477,19 @@ class MailReader:
         self,
         acct_name: str,
         mbox_name: str,
-        days_back: int,
+        seconds_back: int,
         max_messages: int,
         fetch_body: bool,
         fetch_recipients: bool,
         fetch_raw_source: bool = False,
-    ) -> list[MailMessage]:
-        """Fetch messages from a single mailbox with per-mailbox timeout."""
+    ) -> tuple[list[MailMessage], Optional[str]]:
+        """Fetch messages from a single mailbox with per-mailbox timeout.
+
+        Returns ``(messages, error_str | None)``.  Errors are captured
+        and returned — never raised — so the orchestrator can keep
+        going through the remaining mailboxes and record per-bucket
+        outcome in the sync_state watermark file.
+        """
         # Pick the body-extraction snippet: skip / plain content / raw RFC822.
         if not fetch_body:
             body_block = _BODY_SKIP
@@ -408,7 +499,7 @@ class MailReader:
             body_block = _BODY_BLOCK
         self._fetch_raw_source = fetch_raw_source  # used by _convert
         script = _FETCH_MBOX_SCRIPT.format(
-            days_back=days_back,
+            seconds_back=seconds_back,
             max_messages=max_messages,
             acct_name_esc=self._esc(acct_name),
             mbox_name_esc=self._esc(mbox_name),
@@ -420,27 +511,27 @@ class MailReader:
 
         try:
             raw = run_applescript(script, timeout=self.PER_MBOX_TIMEOUT)
+        except AppleScriptTimeout as e:
+            logger.warning(
+                f"[mail] '{acct_name}/{mbox_name}' timed out after "
+                f"{self.PER_MBOX_TIMEOUT}s (incl. retries) — skipping. "
+                f"Try reducing PA_MAIL_DAYS_BACK or PA_MAIL_MAX_MESSAGES."
+            )
+            return [], f"timeout after {self.PER_MBOX_TIMEOUT}s"
+        except AppleScriptPermissionDenied:
+            logger.error(
+                "[mail] Access denied (error 1743). "
+                "Go to System Settings → Privacy → Automation → Mail."
+            )
+            return [], "permission denied (TCC 1743)"
         except RuntimeError as e:
-            err = str(e)
-            if "timed out" in err.lower():
-                logger.warning(
-                    f"[mail] '{acct_name}/{mbox_name}' timed out after "
-                    f"{self.PER_MBOX_TIMEOUT}s — skipping. "
-                    f"Try reducing PA_MAIL_DAYS_BACK or PA_MAIL_MAX_MESSAGES."
-                )
-            elif "1743" in err or "not allowed" in err.lower():
-                logger.error(
-                    "[mail] Access denied (error 1743). "
-                    "Go to System Settings → Privacy → Automation → Mail."
-                )
-            else:
-                logger.warning(f"[mail] '{acct_name}/{mbox_name}' error: {e}")
-            return []
+            logger.warning(f"[mail] '{acct_name}/{mbox_name}' error: {e}")
+            return [], str(e)
 
         msgs = self._parse(raw, f"{acct_name}/{mbox_name}")
         if msgs:
             logger.debug(f"[mail] '{acct_name}/{mbox_name}': {len(msgs)} messages")
-        return msgs
+        return msgs, None
 
     # ------------------------------------------------------------------
     # Parsing

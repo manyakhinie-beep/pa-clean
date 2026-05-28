@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator, Optional
 
@@ -652,6 +653,16 @@ def _run_sync_calendar(vault_path: Path) -> dict:
         logger.warning(f"[sync] calendar: {msg}")
         return {"events": 0, "contacts": 0, "warning": msg}
 
+    # ── Incremental sync: load per-calendar watermarks ──────────────────
+    from personal_assistant.services import sync_state as _sync_state_mod
+    started_at = datetime.now(tz=timezone.utc)
+    state = _sync_state_mod.load()
+    since_per_calendar: dict[str, datetime] = {}
+    for cal_name, entry in (state.get("calendar") or {}).items():
+        wm = _sync_state_mod.get_watermark(state, "calendar", cal_name)
+        if wm is not None:
+            since_per_calendar[cal_name] = wm
+
     reader = CalendarReader()
     reader.PER_CAL_TIMEOUT = settings.calendar_per_cal_timeout
     events = reader.fetch_events(
@@ -660,15 +671,45 @@ def _run_sync_calendar(vault_path: Path) -> dict:
         calendar_names=settings.calendar_names_list or None,
         fetch_attendees=settings.calendar_fetch_attendees,
         max_events_per_calendar=settings.calendar_max_events,
+        since_per_calendar=since_per_calendar or None,
     )
     contacts = reader.extract_contacts(events)
     writer = VaultWriter(vault_path)
     writer.write_events(events, overwrite=settings.overwrite)
     writer.write_contacts(contacts, overwrite=settings.overwrite)
-    logger.info(f"[sync] calendar: {len(events)} events, {len(contacts)} contacts")
+
+    # ── Persist watermarks ──────────────────────────────────────────────
+    # Success → record started_at (next run scans from started_at - overlap).
+    # Failure → keep previous last_synced_at so we don't widen the window.
+    for cal_name, report in (reader.last_report or {}).items():
+        if report.get("ok"):
+            _sync_state_mod.record_success(
+                state, "calendar", cal_name,
+                count=report.get("count", 0), at=started_at,
+            )
+        else:
+            _sync_state_mod.record_failure(
+                state, "calendar", cal_name,
+                error=report.get("error", "unknown"),
+            )
+    try:
+        _sync_state_mod.save(state)
+    except Exception as exc:  # noqa: BLE001 — never fail sync on telemetry
+        logger.warning(f"[sync] could not persist sync_state: {exc}")
+
+    failed = [k for k, r in reader.last_report.items() if not r.get("ok")]
+    logger.info(
+        f"[sync] calendar: {len(events)} events, {len(contacts)} contacts, "
+        f"failed={failed}"
+    )
 
     warning = None
-    if not events:
+    if failed:
+        warning = (
+            f"Не удалось прочитать календари: {', '.join(failed)} — "
+            "см. data/sync_state.json. Остальные обновлены."
+        )
+    elif not events:
         warning = (
             f"0 событий за период "
             f"-{settings.calendar_days_back}…+{settings.calendar_days_forward} дней — "
@@ -696,6 +737,16 @@ def _run_sync_mail(vault_path: Path) -> dict:
         return {"messages": 0, "contacts": 0, "warning": msg}
 
     from personal_assistant.sync.thread_tracker import ThreadTracker
+    from personal_assistant.services import sync_state as _sync_state_mod
+
+    # ── Incremental sync: load per-mailbox watermarks ───────────────────
+    started_at = datetime.now(tz=timezone.utc)
+    state = _sync_state_mod.load()
+    since_per_mailbox: dict[str, datetime] = {}
+    for mb_key in (state.get("mail") or {}).keys():
+        wm = _sync_state_mod.get_watermark(state, "mail", mb_key)
+        if wm is not None:
+            since_per_mailbox[mb_key] = wm
 
     reader = MailReader()
     reader.PER_MBOX_TIMEOUT = settings.mail_per_mbox_timeout
@@ -705,6 +756,7 @@ def _run_sync_mail(vault_path: Path) -> dict:
         fetch_body=settings.mail_fetch_body,
         fetch_recipients=settings.mail_fetch_recipients,
         fetch_raw_source=settings.mail_fetch_raw_source,
+        since_per_mailbox=since_per_mailbox or None,
     )
     contacts = reader.extract_contacts(messages)
 
@@ -716,10 +768,37 @@ def _run_sync_mail(vault_path: Path) -> dict:
     writer = VaultWriter(vault_path)
     writer.write_messages(messages, overwrite=settings.overwrite)
     writer.write_contacts(contacts, overwrite=settings.overwrite)
-    logger.info(f"[sync] mail: {len(messages)} messages, {len(contacts)} contacts")
+
+    # ── Persist watermarks ──────────────────────────────────────────────
+    for mb_key, report in (reader.last_report or {}).items():
+        if report.get("ok"):
+            _sync_state_mod.record_success(
+                state, "mail", mb_key,
+                count=report.get("count", 0), at=started_at,
+            )
+        else:
+            _sync_state_mod.record_failure(
+                state, "mail", mb_key,
+                error=report.get("error", "unknown"),
+            )
+    try:
+        _sync_state_mod.save(state)
+    except Exception as exc:  # noqa: BLE001 — never fail sync on telemetry
+        logger.warning(f"[sync] could not persist sync_state: {exc}")
+
+    failed = [k for k, r in reader.last_report.items() if not r.get("ok")]
+    logger.info(
+        f"[sync] mail: {len(messages)} messages, {len(contacts)} contacts, "
+        f"failed={failed}"
+    )
 
     warning = None
-    if not messages:
+    if failed:
+        warning = (
+            f"Не удалось прочитать ящики: {', '.join(failed)} — "
+            "см. data/sync_state.json. Остальные обновлены."
+        )
+    elif not messages and not reader.last_report:
         warning = (
             f"0 сообщений за последние {settings.mail_days_back} дней — "
             "проверьте доступ: Системные настройки → Конфиденциальность → Автоматизация → Mail"

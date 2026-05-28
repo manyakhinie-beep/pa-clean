@@ -215,7 +215,7 @@ class Settings:
         self.sync_on_schedule: bool = _env_bool("SYNC_ON_SCHEDULE", False)
 
         # ------------------------------------------------------ Calendar sync
-        self.calendar_days_back: int = _env_int("CALENDAR_DAYS_BACK", 30)
+        self.calendar_days_back: int = _env_int("CALENDAR_DAYS_BACK", 60)
         self.calendar_days_forward: int = _env_int("CALENDAR_DAYS_FORWARD", 90)
         self.calendar_names: str = _env("CALENDAR_NAMES", "")
         self.calendar_max_events: int = _env_int("CALENDAR_MAX_EVENTS", 300)
@@ -223,7 +223,7 @@ class Settings:
         self.calendar_fetch_attendees: bool = _env_bool("CALENDAR_FETCH_ATTENDEES", False)
 
         # --------------------------------------------------------- Mail sync
-        self.mail_days_back: int = _env_int("MAIL_DAYS_BACK", 30)
+        self.mail_days_back: int = _env_int("MAIL_DAYS_BACK", 60)
         self.mail_max_messages: int = _env_int("MAIL_MAX_MESSAGES", 100)
         self.mail_per_mbox_timeout: int = _env_int("MAIL_PER_MBOX_TIMEOUT", 45)
         self.mail_fetch_body: bool = _env_bool("MAIL_FETCH_BODY", True) or _env_bool(

@@ -17,6 +17,7 @@ Performance notes:
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -25,10 +26,32 @@ from loguru import logger
 from personal_assistant.models import CalendarEvent, Contact
 from personal_assistant.readers.applescript_base import (
     AS_PREAMBLE,
+    AppleScriptPermissionDenied,
+    AppleScriptTimeout,
     run_applescript,
     safe_str,
     sanitize_json,
 )
+
+# ---------------------------------------------------------------------------
+# Window resolution: shared with ``mail_reader._resolve_seconds_back`` —
+# duplicated here intentionally to keep the readers module-level helpers
+# self-contained (and to keep ``services`` cleanly above ``readers`` in
+# the dep DAG, never the other way around).
+# ---------------------------------------------------------------------------
+
+_MIN_WINDOW_SECONDS = 60
+
+
+def _resolve_seconds_back(days_back: int, since: Optional[datetime]) -> int:
+    ceiling = max(_MIN_WINDOW_SECONDS, int(days_back) * 86_400)
+    if since is None:
+        return ceiling
+    if since.tzinfo is None:
+        since = since.replace(tzinfo=timezone.utc)
+    delta = (datetime.now(tz=timezone.utc) - since).total_seconds()
+    seconds = int(max(_MIN_WINDOW_SECONDS, delta))
+    return min(seconds, ceiling)
 
 # ---------------------------------------------------------------------------
 # Script 1: list all calendars  (fast, ~0.5 s)
@@ -59,7 +82,7 @@ return output
 _FETCH_CAL_SCRIPT = (
     AS_PREAMBLE
     + """\
-set startDate to (current date) - ({days_back} * days)
+set startDate to (current date) - {seconds_back}
 set endDate   to (current date) + ({days_forward} * days)
 set maxEvts   to {max_events}
 
@@ -148,7 +171,7 @@ return output
 _FETCH_ATTENDEES_SCRIPT = (
     AS_PREAMBLE
     + """\
-set startDate to (current date) - ({days_back} * days)
+set startDate to (current date) - {seconds_back}
 set endDate   to (current date) + ({days_forward} * days)
 set maxEvts   to {max_events}
 
@@ -226,6 +249,10 @@ class CalendarReader:
 
     Splits work into per-calendar AppleScript calls so one slow or
     subscribed calendar cannot block all others.
+
+    Per-run telemetry mirrors :class:`MailReader.last_report` — keyed
+    by calendar name — and is what the orchestrator persists into
+    ``data/sync_state.json`` for incremental sync.
     """
 
     # Per-calendar timeout (seconds).  Most calendars finish in < 5 s.
@@ -236,6 +263,10 @@ class CalendarReader:
     # Default cap: never fetch more than this many events from a single calendar.
     DEFAULT_MAX_EVENTS: int = 300
 
+    def __init__(self) -> None:
+        # Populated by fetch_events — see class docstring.
+        self.last_report: dict[str, dict] = {}
+
     def fetch_events(
         self,
         days_back: int = 30,
@@ -243,6 +274,8 @@ class CalendarReader:
         calendar_names: Optional[list[str]] = None,
         fetch_attendees: bool = False,
         max_events_per_calendar: int = DEFAULT_MAX_EVENTS,
+        since: Optional[datetime] = None,
+        since_per_calendar: Optional[dict[str, datetime]] = None,
     ) -> list[CalendarEvent]:
         """Fetch events in [now - days_back, now + days_forward].
 
@@ -254,7 +287,14 @@ class CalendarReader:
             fetch_attendees: also fetch attendee emails (slow; adds ~1 s per
                              event with participants). Default False.
             max_events_per_calendar: hard cap per calendar to avoid runaway loops.
+            since: optional global watermark — fetch only events whose ``startDate``
+                is after this timestamp.  Floored at 60 seconds and ceilinged by
+                ``days_back`` so the configured limits always win.
+            since_per_calendar: per-calendar watermarks keyed by calendar name,
+                take precedence over ``since``.
         """
+        # Reset telemetry for this run
+        self.last_report = {}
         # Step 1 — list all calendars
         try:
             all_cals = self._list_calendars()
@@ -288,27 +328,53 @@ class CalendarReader:
             f"max {max_events_per_calendar} events each)"
         )
 
-        # Step 3 — fetch per calendar
+        # Step 3 — fetch per calendar (skip-on-fail isolated per bucket)
         all_events: list[CalendarEvent] = []
         for cal in selected:
-            events = self._fetch_one_calendar(
+            cal_since = None
+            if since_per_calendar and cal["name"] in since_per_calendar:
+                cal_since = since_per_calendar[cal["name"]]
+            elif since is not None:
+                cal_since = since
+            seconds_back = _resolve_seconds_back(days_back, cal_since)
+
+            started = time.monotonic()
+            events, err = self._fetch_one_calendar(
                 cal_name=cal["name"],
-                days_back=days_back,
+                seconds_back=seconds_back,
                 days_forward=days_forward,
                 max_events=max_events_per_calendar,
             )
+            duration = round(time.monotonic() - started, 2)
+            self.last_report[cal["name"]] = {
+                "ok": err is None,
+                "count": len(events),
+                "error": err or "",
+                "duration_s": duration,
+                "since": cal_since.isoformat() if cal_since else "",
+            }
             all_events.extend(events)
 
-        logger.info(f"[calendar] Total events fetched: {len(all_events)}")
+        ok = sum(1 for r in self.last_report.values() if r["ok"])
+        fail = len(self.last_report) - ok
+        logger.info(
+            f"[calendar] Total events fetched: {len(all_events)} "
+            f"(calendars ok={ok}, failed={fail})"
+        )
 
         # Step 4 — optional attendees pass
         if fetch_attendees and all_events:
+            # Attendee enrichment uses the same per-calendar window as the
+            # initial fetch — pass ``since`` through so we don't pull
+            # attendees for events the watermark already skipped.
             self._enrich_attendees(
                 all_events,
                 selected,
                 days_back=days_back,
                 days_forward=days_forward,
                 max_events=max_events_per_calendar,
+                since=since,
+                since_per_calendar=since_per_calendar,
             )
 
         return all_events
@@ -339,39 +405,43 @@ class CalendarReader:
     def _fetch_one_calendar(
         self,
         cal_name: str,
-        days_back: int,
+        seconds_back: int,
         days_forward: int,
         max_events: int,
-    ) -> list[CalendarEvent]:
-        """Fetch events from a single calendar with per-calendar timeout."""
+    ) -> tuple[list[CalendarEvent], Optional[str]]:
+        """Fetch events from a single calendar with per-calendar timeout.
+
+        Returns ``(events, error_str | None)`` — the orchestrator records
+        per-calendar outcome to ``data/sync_state.json``.
+        """
         script = _FETCH_CAL_SCRIPT.format(
-            days_back=days_back,
+            seconds_back=seconds_back,
             days_forward=days_forward,
             max_events=max_events,
             cal_name_esc=self._esc_name(cal_name),
         )
         try:
             raw = run_applescript(script, timeout=self.PER_CAL_TIMEOUT)
+        except AppleScriptTimeout:
+            logger.warning(
+                f"[calendar] '{cal_name}' timed out after {self.PER_CAL_TIMEOUT}s "
+                f"(incl. retries) — skipping. Try reducing PA_CALENDAR_DAYS_BACK/FORWARD "
+                f"or exclude this calendar with PA_CALENDAR_NAMES."
+            )
+            return [], f"timeout after {self.PER_CAL_TIMEOUT}s"
+        except AppleScriptPermissionDenied:
+            logger.error(
+                "[calendar] Access denied (error 1743). "
+                "Go to System Settings → Privacy → Automation and allow access to Calendar."
+            )
+            return [], "permission denied (TCC 1743)"
         except RuntimeError as e:
-            err = str(e)
-            if "timed out" in err.lower():
-                logger.warning(
-                    f"[calendar] '{cal_name}' timed out after {self.PER_CAL_TIMEOUT}s "
-                    f"— skipping. Try reducing PA_CALENDAR_DAYS_BACK/FORWARD "
-                    f"or exclude this calendar with PA_CALENDAR_NAMES."
-                )
-            elif "1743" in err or "not allowed" in err.lower():
-                logger.error(
-                    "[calendar] Access denied (error 1743). "
-                    "Go to System Settings → Privacy → Automation and allow access to Calendar."
-                )
-            else:
-                logger.warning(f"[calendar] '{cal_name}' error: {e}")
-            return []
+            logger.warning(f"[calendar] '{cal_name}' error: {e}")
+            return [], str(e)
 
         events = self._parse(raw, cal_name)
         logger.debug(f"[calendar] '{cal_name}': {len(events)} events")
-        return events
+        return events, None
 
     def _enrich_attendees(
         self,
@@ -380,13 +450,21 @@ class CalendarReader:
         days_back: int,
         days_forward: int,
         max_events: int,
+        since: Optional[datetime] = None,
+        since_per_calendar: Optional[dict[str, datetime]] = None,
     ) -> None:
         """Fetch attendees per calendar and merge into events list (slow pass)."""
         uid_map: dict[str, CalendarEvent] = {ev.uid: ev for ev in events}
 
         for cal in calendars:
+            cal_since = None
+            if since_per_calendar and cal["name"] in since_per_calendar:
+                cal_since = since_per_calendar[cal["name"]]
+            elif since is not None:
+                cal_since = since
+            seconds_back = _resolve_seconds_back(days_back, cal_since)
             script = _FETCH_ATTENDEES_SCRIPT.format(
-                days_back=days_back,
+                seconds_back=seconds_back,
                 days_forward=days_forward,
                 max_events=max_events,
                 cal_name_esc=self._esc_name(cal["name"]),
