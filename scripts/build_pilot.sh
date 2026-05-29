@@ -195,11 +195,17 @@ else
     source "$REPO_ROOT/packaging/pyapp.env"
     set +a
 
-    # Override: указываем локальные wheels и наш wheel pa-clean как primary.
+    # Override: указываем версию + путь к нашему wheel-у.
+    #
+    # ВАЖНО: НЕ ставим ``PYAPP_PROJECT_DEPENDENCY_FILE`` и НЕ оставляем
+    # ``PYAPP_PIP_EXTRA_ARGS=--no-deps``.  Phase 1 полагается на pip
+    # bootstrap из PyPI через METADATA wheel-а (см. pyapp.env).
+    # ``$LOCK`` остаётся как побочный артефакт для будущего Phase 2.
     export PYAPP_PROJECT_NAME="pa-clean"
     export PYAPP_PROJECT_VERSION="$PILOT_TAG"
     export PYAPP_PROJECT_PATH="$WHEEL"
-    export PYAPP_PROJECT_DEPENDENCY_FILE="$LOCK"
+    unset PYAPP_PROJECT_DEPENDENCY_FILE
+    unset PYAPP_PIP_EXTRA_ARGS
 
     # Pyapp скачает python-build-standalone (~150 MB) и встроит ссылку на него.
     # Для полного оффлайна можно подложить локальный архив через

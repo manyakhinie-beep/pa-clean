@@ -131,7 +131,10 @@ def test_info_plist_explains_apple_events_usage():
         # PYAPP_EXEC_MODULE без него запустил бы `python -m` без аргументов.
         "PYAPP_EXEC_SPEC",
         "PYAPP_PYTHON_VERSION",
-        "PYAPP_PROJECT_DEPENDENCY_FILE",
+        # PYAPP_PROJECT_DEPENDENCY_FILE намеренно НЕ обязателен — в Phase 1
+        # деп-файл встраивается криво (PyApp 0.29 inconsistency), и мы
+        # полагаемся на bootstrap из PyPI через wheel METADATA.
+        # См. test_pyapp_env_does_not_block_dep_install.
         "PYAPP_FULL_ISOLATION",
         "PYAPP_SELF_COMMAND",
     ],
@@ -141,6 +144,28 @@ def test_pyapp_env_declares_key(key: str):
     assert re.search(rf"^{re.escape(key)}=", src, re.MULTILINE), (
         f"pyapp.env missing required key: {key}"
     )
+
+
+def test_pyapp_env_does_not_block_dep_install():
+    """Регрессионная страховка: ``PYAPP_PIP_EXTRA_ARGS=--no-deps``
+    блокирует установку транзитивных зависимостей из METADATA wheel-а.
+    На первом запуске у пользователя получался venv без ``uvicorn`` /
+    ``fastapi`` / ``mlx-lm`` → бандл падал с ModuleNotFoundError.
+
+    Если кто-то вернёт строку в pyapp.env «для оптимизации embedded
+    wheelhouse», этот тест упадёт — phase 1 не предполагает offline."""
+    src = (_PACKAGING / "pyapp.env").read_text(encoding="utf-8")
+    # Может присутствовать как комментарий — ищем именно активную строку.
+    for line in src.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#") or not stripped:
+            continue
+        if stripped.startswith("PYAPP_PIP_EXTRA_ARGS=") and "--no-deps" in stripped:
+            raise AssertionError(
+                "PYAPP_PIP_EXTRA_ARGS=--no-deps blocks transitive install — "
+                "see Phase 1 incident with missing uvicorn/fastapi/mlx-lm. "
+                "Re-enable only as part of Phase 2 offline-wheelhouse work."
+            )
 
 
 def test_pyapp_env_does_not_set_obsolete_distribution_variant():
