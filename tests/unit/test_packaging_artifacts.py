@@ -125,7 +125,8 @@ def test_info_plist_explains_apple_events_usage():
     [
         "PYAPP_PROJECT_NAME",
         "PYAPP_PROJECT_VERSION",
-        "PYAPP_EXEC_MODULE",
+        # PYAPP_EXEC_SPEC — единственный способ задать вызов функции в 0.29;
+        # PYAPP_EXEC_MODULE без него запустил бы `python -m` без аргументов.
         "PYAPP_EXEC_SPEC",
         "PYAPP_PYTHON_VERSION",
         "PYAPP_PROJECT_DEPENDENCY_FILE",
@@ -138,6 +139,20 @@ def test_pyapp_env_declares_key(key: str):
     assert re.search(rf"^{re.escape(key)}=", src, re.MULTILINE), (
         f"pyapp.env missing required key: {key}"
     )
+
+
+def test_pyapp_env_does_not_set_obsolete_distribution_variant():
+    """В PyApp 0.29 убрали ``PYAPP_DISTRIBUTION_VARIANT=install_only_stripped``
+    как селектор python-build-standalone-варианта; теперь этот env
+    интерпретируется как URL источника, build.rs падает с
+    «Unable to determine format for distribution source».  Регрессионная
+    страховка от случайного возврата строки в pyapp.env."""
+    src = (_PACKAGING / "pyapp.env").read_text(encoding="utf-8")
+    assert not re.search(
+        r"^PYAPP_DISTRIBUTION_VARIANT\s*=\s*install_only",
+        src,
+        re.MULTILINE,
+    ), "PYAPP_DISTRIBUTION_VARIANT=install_only_* is invalid in PyApp 0.29+"
 
 
 def test_pyapp_entry_module_points_to_real_callable():
