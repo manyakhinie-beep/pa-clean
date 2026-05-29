@@ -90,6 +90,17 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
+      # ── PyApp launcher отдельным артефактом ────────────────────────────
+      # Полезно когда у разработчика заблокирован index.crates.io локально:
+      # можно скачать сюда launcher из workflow run, потом локально:
+      #   ./scripts/build_pilot.sh --launcher-from=./pyapp
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pyapp-launcher-arm64-${{ github.sha }}
+          path: dist/bin/pyapp
+          retention-days: 14
+          if-no-files-found: error
+
       # ── Релиз — если запушен тег v*-pilot* ─────────────────────────────
       - name: Attach to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-pilot')

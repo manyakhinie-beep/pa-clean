@@ -31,6 +31,35 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
+# ── Argument parsing ──────────────────────────────────────────────────────────
+LAUNCHER_FROM=""
+SKIP_WHEELHOUSE_STRICT=false
+for arg in "$@"; do
+    case "$arg" in
+        --launcher-from=*)
+            # Путь к уже собранному PyApp launcher (например, скачанный
+            # из GitHub Actions артефакта).  Полезно когда локально
+            # ``cargo install pyapp`` падает из-за заблокированного
+            # ``index.crates.io`` в корпоративной сети.
+            LAUNCHER_FROM="${arg#*=}" ;;
+        --lenient-wheelhouse)
+            # Не падать если wheelhouse получился меньше 50 wheels —
+            # для отладки.  В обычной сборке требуем полный.
+            SKIP_WHEELHOUSE_STRICT=true ;;
+        --help|-h)
+            cat <<EOF
+Usage: $0 [--launcher-from=PATH] [--lenient-wheelhouse]
+
+  --launcher-from=PATH      Use a pre-built PyApp launcher binary
+                            (skips Rust/cargo build).  Useful when
+                            crates.io is blocked locally; build via
+                            GitHub Actions, download artifact, pass here.
+  --lenient-wheelhouse      Don't fail if wheel download is partial.
+EOF
+            exit 0 ;;
+    esac
+done
+
 # ── Утилиты вывода ────────────────────────────────────────────────────────────
 GREEN='\033[0;32m'; CYAN='\033[0;36m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
 ok()   { echo -e "${GREEN}✓${NC} $*"; }
@@ -43,7 +72,12 @@ fail() { echo -e "${RED}✗${NC}  $*"; exit 1; }
 [[ "$(uname -m)" == "arm64" ]] || fail "build_pilot.sh requires Apple Silicon (arm64)."
 
 command -v uv >/dev/null || fail "uv not found. Install: curl -LsSf https://astral.sh/uv/install.sh | sh"
-command -v cargo >/dev/null || fail "cargo not found. Install: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y"
+if [[ -z "$LAUNCHER_FROM" ]]; then
+    command -v cargo >/dev/null || fail "cargo not found. Install: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+Tip: if your network blocks crates.io, run the build on GitHub Actions
+(see .github/workflows/build-pilot.yml) and pass the launcher artifact
+via --launcher-from=<path>."
+fi
 
 # ── Версия из pyproject.toml ──────────────────────────────────────────────────
 VERSION=$(grep '^version = ' pyproject.toml | head -1 | sed -E 's/version = "([^"]+)"/\1/')
@@ -86,43 +120,83 @@ cp "$WHEEL" "$WHEELHOUSE/"
 # Скачиваем все transitive wheels через pip download.  --platform=macosx_13_0_arm64
 # гарантирует что MLX-обвязка и compiled-wheels берутся для нужной платформы.
 info "[3/5] Downloading transitive wheels into wheelhouse (this can take 2-5 min)"
-uv pip download \
+WHEELHOUSE_LOG="$DIST/wheelhouse.log"
+if ! uv pip download \
     -r "$LOCK" \
     --dest "$WHEELHOUSE" \
     --platform macosx_13_0_arm64 \
     --python-version 3.12 \
     --only-binary=:all: \
-    >/dev/null 2>&1 || warn "Some sdist-only deps may fall back to runtime PyPI; pilot still works if PyPI reachable"
+    > "$WHEELHOUSE_LOG" 2>&1
+then
+    warn "uv pip download finished with errors — see $WHEELHOUSE_LOG"
+    tail -10 "$WHEELHOUSE_LOG" >&2 || true
+fi
 
 WHEEL_COUNT=$(ls "$WHEELHOUSE"/*.whl 2>/dev/null | wc -l | tr -d ' ')
 ok "wheelhouse: $WHEEL_COUNT wheels ($(du -sh "$WHEELHOUSE" | cut -f1))"
 
-# ── Шаг 4: собираем PyApp launcher ───────────────────────────────────────────
-info "[4/5] Building PyApp launcher (cargo install pyapp)"
+# Sanity: requirements насчитывает 100+ пакетов; 1-2 wheels означает
+# что download полностью провалился (обычно — сетевой блок PyPI или
+# конфликт платформы).  Запекать почти-пустой wheelhouse бессмысленно —
+# бутстрап у пользователя всё равно полезет в PyPI и упадёт там же.
+if [[ "$WHEEL_COUNT" -lt 50 && "$SKIP_WHEELHOUSE_STRICT" != "true" ]]; then
+    fail "wheelhouse too small ($WHEEL_COUNT < 50 wheels). Check $WHEELHOUSE_LOG.
+Common causes:
+  * PyPI заблокирован прокси (увидите 'Could not resolve' или 403)
+  * платформа не соответствует --platform=macosx_13_0_arm64
+  * sdist-only пакеты в requirements-pyapp.txt
+Bypass для отладки: $0 --lenient-wheelhouse"
+fi
 
-# Экспортируем env-vars из packaging/pyapp.env
-set -a
-# shellcheck source=packaging/pyapp.env
-source "$REPO_ROOT/packaging/pyapp.env"
-set +a
-
-# Override: указываем локальные wheels и наш wheel pa-clean как primary.
-export PYAPP_PROJECT_NAME="pa-clean"
-export PYAPP_PROJECT_VERSION="$PILOT_TAG"
-export PYAPP_PROJECT_PATH="$WHEEL"
-export PYAPP_PROJECT_DEPENDENCY_FILE="$LOCK"
-
-# Pyapp скачает python-build-standalone (~150 MB) и встроит ссылку на него.
-# Для полного оффлайна можно подложить локальный архив через
-# PYAPP_DISTRIBUTION_PATH=<path>; для phase 1 этого не делаем.
-
-CARGO_TARGET_DIR="$DIST/cargo-target" \
-    cargo install pyapp --force --root "$DIST" 2>&1 \
-    | grep -v "^   Compiling\|^    Updating\|^    Finished\|^   Installed" || true
-
+# ── Шаг 4: собираем (или импортируем) PyApp launcher ──────────────────────────
 LAUNCHER="$DIST/bin/pyapp"
-[[ -x "$LAUNCHER" ]] || fail "PyApp launcher did not build at $LAUNCHER"
-ok "launcher: $LAUNCHER ($(du -h "$LAUNCHER" | cut -f1))"
+mkdir -p "$DIST/bin"
+
+if [[ -n "$LAUNCHER_FROM" ]]; then
+    info "[4/5] Importing pre-built PyApp launcher from $LAUNCHER_FROM"
+    [[ -f "$LAUNCHER_FROM" ]] || fail "launcher not found at $LAUNCHER_FROM"
+    cp "$LAUNCHER_FROM" "$LAUNCHER"
+    chmod +x "$LAUNCHER"
+    ok "launcher: $LAUNCHER ($(du -h "$LAUNCHER" | cut -f1)) [imported]"
+else
+    info "[4/5] Building PyApp launcher (cargo install pyapp)"
+
+    # Экспортируем env-vars из packaging/pyapp.env
+    set -a
+    # shellcheck source=packaging/pyapp.env
+    source "$REPO_ROOT/packaging/pyapp.env"
+    set +a
+
+    # Override: указываем локальные wheels и наш wheel pa-clean как primary.
+    export PYAPP_PROJECT_NAME="pa-clean"
+    export PYAPP_PROJECT_VERSION="$PILOT_TAG"
+    export PYAPP_PROJECT_PATH="$WHEEL"
+    export PYAPP_PROJECT_DEPENDENCY_FILE="$LOCK"
+
+    # Pyapp скачает python-build-standalone (~150 MB) и встроит ссылку на него.
+    # Для полного оффлайна можно подложить локальный архив через
+    # PYAPP_DISTRIBUTION_PATH=<path>; для phase 1 этого не делаем.
+
+    if ! CARGO_TARGET_DIR="$DIST/cargo-target" \
+        cargo install pyapp --force --root "$DIST" 2>&1 \
+        | grep -v "^   Compiling\|^    Updating\|^    Finished\|^   Installed"
+    then
+        fail "cargo install pyapp failed.
+Common cause: your network blocks index.crates.io (corporate proxy).
+Solutions:
+  1) Build the launcher on GitHub Actions:
+       git push -u origin <branch>        # workflow .github/workflows/build-pilot.yml
+                                          # runs on macos-14 with full network
+     Download the PyApp launcher binary from the artifact, then re-run:
+       $0 --launcher-from=/path/to/pyapp
+  2) Configure cargo to use a corporate crates.io mirror in
+     ~/.cargo/config.toml (see https://doc.rust-lang.org/cargo/reference/registries.html)."
+    fi
+
+    [[ -x "$LAUNCHER" ]] || fail "PyApp launcher did not build at $LAUNCHER"
+    ok "launcher: $LAUNCHER ($(du -h "$LAUNCHER" | cut -f1))"
+fi
 
 # ── Шаг 5: собираем .app бандл ────────────────────────────────────────────────
 info "[5/5] Wrapping into PaClean.app bundle"
