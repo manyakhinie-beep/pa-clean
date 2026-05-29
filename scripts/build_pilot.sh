@@ -77,6 +77,30 @@ if [[ -z "$LAUNCHER_FROM" ]]; then
 Tip: if your network blocks crates.io, run the build on GitHub Actions
 (see .github/workflows/build-pilot.yml) and pass the launcher artifact
 via --launcher-from=<path>."
+else
+    # Валидируем --launcher-from путь СРАЗУ, не после 2-минутного wheelhouse.
+    LAUNCHER_FROM_RESOLVED="$LAUNCHER_FROM"
+    # Раскрываем ~ если передан как литерал
+    LAUNCHER_FROM_RESOLVED="${LAUNCHER_FROM_RESOLVED/#\~/$HOME}"
+    [[ -f "$LAUNCHER_FROM_RESOLVED" ]] || fail "--launcher-from points to a missing file:
+    $LAUNCHER_FROM_RESOLVED
+Download the 'pyapp-launcher-arm64-<sha>' artifact from the GitHub
+Actions run (workflow: build-pilot.yml) and try again."
+    LAUNCHER_FROM="$LAUNCHER_FROM_RESOLVED"
+fi
+
+# pip — используется на шаге 3 (download wheels).  Newer uv has 'uv pip
+# download' but older versions don't — мы используем тот, что доступен,
+# с фолбэком на python3 -m pip.
+PIP_DOWNLOAD_CMD=()
+if uv pip download --help >/dev/null 2>&1; then
+    PIP_DOWNLOAD_CMD=(uv pip download)
+elif python3 -m pip --version >/dev/null 2>&1; then
+    PIP_DOWNLOAD_CMD=(python3 -m pip download)
+else
+    fail "Neither 'uv pip download' nor 'python3 -m pip' is available.
+Install pip:  python3 -m ensurepip --user
+Or upgrade uv: curl -LsSf https://astral.sh/uv/install.sh | sh"
 fi
 
 # ── Версия из pyproject.toml ──────────────────────────────────────────────────
@@ -119,9 +143,12 @@ cp "$WHEEL" "$WHEELHOUSE/"
 
 # Скачиваем все transitive wheels через pip download.  --platform=macosx_13_0_arm64
 # гарантирует что MLX-обвязка и compiled-wheels берутся для нужной платформы.
+# Используем заранее выбранный PIP_DOWNLOAD_CMD (uv pip download или
+# python3 -m pip download) — см. блок выбора выше.
 info "[3/5] Downloading transitive wheels into wheelhouse (this can take 2-5 min)"
+info "    using: ${PIP_DOWNLOAD_CMD[*]}"
 WHEELHOUSE_LOG="$DIST/wheelhouse.log"
-if ! uv pip download \
+if ! "${PIP_DOWNLOAD_CMD[@]}" \
     -r "$LOCK" \
     --dest "$WHEELHOUSE" \
     --platform macosx_13_0_arm64 \
@@ -129,7 +156,7 @@ if ! uv pip download \
     --only-binary=:all: \
     > "$WHEELHOUSE_LOG" 2>&1
 then
-    warn "uv pip download finished with errors — see $WHEELHOUSE_LOG"
+    warn "pip download finished with errors — see $WHEELHOUSE_LOG"
     tail -10 "$WHEELHOUSE_LOG" >&2 || true
 fi
 
