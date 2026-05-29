@@ -151,7 +151,7 @@ WHEELHOUSE_LOG="$DIST/wheelhouse.log"
 if ! "${PIP_DOWNLOAD_CMD[@]}" \
     -r "$LOCK" \
     --dest "$WHEELHOUSE" \
-    --platform macosx_13_0_arm64 \
+    --platform macosx_14_0_arm64 \
     --python-version 3.13 \
     --only-binary=:all: \
     > "$WHEELHOUSE_LOG" 2>&1

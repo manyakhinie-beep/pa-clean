@@ -70,12 +70,36 @@ def test_info_plist_template_parses_after_substitution():
     assert data["CFBundleVersion"] == "1.0.0-pilot"
 
 
-def test_info_plist_requires_macos_13_plus_arm64():
+def test_info_plist_requires_macos_14_plus_arm64():
+    """mlx 0.30+ публикуется как macosx_14_0_arm64 wheels — на macOS 13
+    бандл не запустится.  LSMinimumSystemVersion должно совпадать с
+    `--platform` в build_pilot.sh, иначе либо пилоты увидят
+    непонятную ошибку запуска, либо pip download отдаст пустой wheelhouse."""
     raw = (_PACKAGING / "Info.plist.template").read_text(encoding="utf-8")
     rendered = raw.replace("__VERSION__", "x")
     data = plistlib.loads(rendered.encode("utf-8"))
-    assert data["LSMinimumSystemVersion"] == "13.0"
+    assert data["LSMinimumSystemVersion"] == "14.0"
     assert data["LSArchitecturePriority"] == ["arm64"]
+
+
+def test_build_script_platform_matches_info_plist():
+    """Регрессия: если build_pilot.sh --platform macosx_X_0_arm64
+    отстаёт от Info.plist LSMinimumSystemVersion=X, pip download либо
+    падает (наш текущий случай) либо тянет несовместимые wheels."""
+    build_sh = (_REPO / "scripts" / "build_pilot.sh").read_text(encoding="utf-8")
+    plist = (_PACKAGING / "Info.plist.template").read_text(encoding="utf-8")
+
+    m_sh = re.search(r"--platform\s+macosx_(\d+)_0_arm64", build_sh)
+    assert m_sh, "build_pilot.sh missing --platform macosx_X_0_arm64"
+    sh_major = int(m_sh.group(1))
+
+    data = plistlib.loads(plist.replace("__VERSION__", "x").encode("utf-8"))
+    plist_major = int(data["LSMinimumSystemVersion"].split(".")[0])
+
+    assert sh_major == plist_major, (
+        f"macOS version mismatch: build_pilot.sh --platform=macosx_{sh_major}_0_arm64, "
+        f"Info.plist LSMinimumSystemVersion={plist_major}.0. These MUST agree."
+    )
 
 
 def test_info_plist_explains_apple_events_usage():

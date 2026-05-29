@@ -26,9 +26,12 @@
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
 
-    <!-- macOS 13+ только (Apple Silicon обязательно для MLX). -->
+    <!-- macOS 14+ только (Apple Silicon + Metal-фичи, которые требует mlx 0.30+).
+         Раньше стоял 13.0, но wheels mlx публикуются от macosx_14_0_arm64 — на
+         macOS 13 они физически не работают.  Чтобы не вводить пилотов в
+         заблуждение «приложение не запускается», требуем macOS 14 явно. -->
     <key>LSMinimumSystemVersion</key>
-    <string>13.0</string>
+    <string>14.0</string>
 
     <key>LSArchitecturePriority</key>
     <array>
