@@ -245,6 +245,20 @@ def test_workflow_runs_smoke_launch():
     assert "Smoke" in src or "smoke" in src
 
 
+def test_workflow_smoke_step_avoids_gnu_timeout():
+    """``timeout(1)`` отсутствует на macOS-раннерах без brew coreutils.
+    Использовать его в shell-степе — гарантия 127 exit code и провала
+    smoke-test независимо от того, работает бандл или нет."""
+    src = (_REPO / ".github" / "workflows" / "build-pilot.yml").read_text(encoding="utf-8")
+    # Не должно быть вызова `timeout 5s` или `timeout Ns ./dist/...`
+    assert "timeout 5s" not in src
+    assert "timeout 10s" not in src
+    # Должен быть портабельный паттерн: запуск в фоне + sleep + kill
+    assert "kill -0" in src, (
+        "smoke step must use portable bg+sleep+kill -0 pattern instead of GNU timeout(1)"
+    )
+
+
 def test_workflow_opts_into_node24():
     """GitHub deprecates Node 20 on actions runners 16 Sep 2026.
     Workflow должен явно включить Node 24, иначе после deadline

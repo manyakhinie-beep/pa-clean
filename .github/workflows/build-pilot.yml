@@ -74,17 +74,33 @@ jobs:
       # ── Smoke-проверка: бандл хотя бы запускается без падения ──────────
       # На CI без HOME-настроек запуск займёт пару секунд и упадёт на отсутствии
       # модели — это OK.  Проверяем что launcher не падает на старте.
-      - name: Smoke-launch the bundle (5s timeout)
+      #
+      # `timeout(1)` на macOS-раннере отсутствует (он в brew coreutils как
+      # `gtimeout`).  Используем нативный bash-паттерн: запускаем в фоне,
+      # ждём 5 секунд, проверяем что процесс ещё жив — если да, бандл
+      # успешно бутстрапнулся; если нет, читаем лог и валим job.
+      - name: Smoke-launch the bundle (5s window)
         run: |
           set +e
-          # Запускаем executable напрямую, не через open — иначе CI ждёт окно браузера.
-          timeout 5s ./dist/PaClean.app/Contents/MacOS/PaClean > smoke.log 2>&1
-          rc=$?
-          echo "Exit code: $rc"
-          echo "--- last 30 lines of smoke.log ---"
-          tail -30 smoke.log || true
-          # rc=124 (timeout) или rc=0 — норма.  Падение Python = провал.
-          [[ "$rc" == "124" || "$rc" == "0" ]] || { echo "Bundle crashed on launch"; exit 1; }
+          ./dist/PaClean.app/Contents/MacOS/PaClean > smoke.log 2>&1 &
+          pid=$!
+          sleep 5
+          if kill -0 "$pid" 2>/dev/null; then
+              echo "✓ Bundle still running after 5s — smoke test passed"
+              kill "$pid" 2>/dev/null || true
+              wait "$pid" 2>/dev/null || true
+              echo "--- last 20 lines of smoke.log ---"
+              tail -20 smoke.log || true
+              exit 0
+          else
+              echo "✗ Bundle exited within 5s — likely a crash"
+              wait "$pid" 2>/dev/null
+              rc=$?
+              echo "Exit code: $rc"
+              echo "--- last 30 lines of smoke.log ---"
+              tail -30 smoke.log || true
+              exit 1
+          fi
 
       # ── Артефакты ──────────────────────────────────────────────────────
       - uses: actions/upload-artifact@v4
