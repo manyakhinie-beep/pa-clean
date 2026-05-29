@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Optional
 
 import click
 from loguru import logger
@@ -926,3 +927,183 @@ def _print_summary(source: str, **kwargs) -> None:
     for key, (w, s) in kwargs.items():
         table.add_row(key.replace("_", " ").title(), str(w), str(s))
     console.print(table)
+
+
+# ---------------------------------------------------------------------------
+# LoRA fine-tuning (`pa lora …`)
+# ---------------------------------------------------------------------------
+#
+# Pipeline:
+#   pa lora prepare  — vault → JSONL train/valid в data/lora/<task>/
+#   pa lora train    — mlx_lm.lora --train на этих файлах → адаптер
+#   pa lora status   — что лежит в data/lora/<task>/adapter/
+#   pa lora clear    — снести адаптер
+#
+# Применение адаптера к live engine — Phase 2.  Сейчас полученный адаптер
+# можно использовать только через прямой ``mlx_lm.generate --adapter-path …``.
+
+
+@main.group("lora")
+def lora_group() -> None:
+    """LoRA fine-tuning из vault-данных пользователя."""
+
+
+def _lora_dir(task: str) -> Path:
+    return Path("data") / "lora" / task
+
+
+@lora_group.command("prepare")
+@click.option("--task", default="draft", type=click.Choice(["draft"]),
+              help="Какой тул дообучаем (пока поддерживается только draft).")
+@click.option("--user-email", default=None,
+              help="Твой email (по умолчанию из PA_USER_EMAIL).")
+@click.option("--max-examples", default=2000, type=int,
+              help="Кап на число пар (берём самые свежие).")
+@click.option("--min-reply-chars", default=80, type=int,
+              help="Игнорировать ответы короче N символов.")
+@click.option("--train-split", default=0.8, type=float,
+              help="Доля train (0.5-0.95).")
+def lora_prepare(task: str, user_email: Optional[str],   # noqa: ANN001
+                 max_examples: int, min_reply_chars: int,
+                 train_split: float) -> None:
+    """Собрать обучающий набор из vault → data/lora/<task>/{train,valid}.jsonl."""
+    from personal_assistant.services import lora_dataset as _ds
+    from personal_assistant.services.tool_prompts import (
+        DEFAULT_DRAFT_SYSTEM,
+    )
+
+    email = (user_email or settings.user_email or "").strip()
+    if not email:
+        fail = console.print
+        fail("[red]✗[/red] Нужен email пользователя.  Передайте --user-email "
+             "или установите PA_USER_EMAIL в .env.")
+        raise click.Abort
+
+    vault_path = Path(settings.vault_path).expanduser()
+    console.rule(f"[bold blue]LoRA prepare — task={task}")
+    console.print(f"vault:  {vault_path}")
+    console.print(f"email:  {email}")
+
+    pairs = _ds.build_pairs(
+        vault_path,
+        user_email=email,
+        min_reply_chars=min_reply_chars,
+        max_examples=max_examples,
+    )
+    if not pairs:
+        console.print("[yellow]⚠[/yellow]  Ни одной пары не извлечено.  "
+                      "Проверьте: vault синхронизирован? Письма имеют "
+                      "thread_id во frontmatter? email правильный?")
+        raise click.Abort
+
+    out_dir = _lora_dir(task)
+    system_prompt = {"draft": DEFAULT_DRAFT_SYSTEM}[task]
+    manifest = _ds.write_dataset(
+        pairs, out_dir, system_prompt=system_prompt,
+        train_split=train_split,
+    )
+
+    table = Table(title=f"Dataset {task}", show_header=True)
+    table.add_column("Field", style="cyan")
+    table.add_column("Value", justify="right", style="green")
+    table.add_row("Total pairs",  str(manifest["total_pairs"]))
+    table.add_row("Train",        str(manifest["train_count"]))
+    table.add_row("Valid",        str(manifest["valid_count"]))
+    table.add_row("Earliest",     manifest["earliest_reply"][:10])
+    table.add_row("Latest",       manifest["latest_reply"][:10])
+    table.add_row("Output dir",   str(out_dir))
+    console.print(table)
+    console.print(f"\nЗапуск обучения:  [cyan]pa lora train --task {task}[/cyan]")
+
+
+@lora_group.command("train")
+@click.option("--task", default="draft", type=click.Choice(["draft"]))
+@click.option("--model", default=None,
+              help="Путь / HF-id базовой модели.  По умолчанию из PA_MLX_MODEL_PATH.")
+@click.option("--iters", default=600, type=int)
+@click.option("--layers", "lora_layers", default=8, type=int,
+              help="Сколько последних слоёв адаптировать.")
+@click.option("--batch-size", default=1, type=int)
+@click.option("--learning-rate", default=1e-5, type=float)
+def lora_train(task: str, model: Optional[str], iters: int, lora_layers: int,
+               batch_size: int, learning_rate: float) -> None:
+    """Запустить mlx_lm.lora на подготовленном датасете."""
+    from personal_assistant.services import lora_trainer as _tr
+
+    data_dir = _lora_dir(task)
+    if not (data_dir / "train.jsonl").exists():
+        console.print(f"[red]✗[/red] {data_dir / 'train.jsonl'} не найден. "
+                      "Сначала запустите [cyan]pa lora prepare[/cyan].")
+        raise click.Abort
+
+    base_model = model or settings.mlx_model_path
+    if not base_model:
+        console.print("[red]✗[/red] Нужна базовая модель.  --model или PA_MLX_MODEL_PATH.")
+        raise click.Abort
+
+    adapter_path = data_dir / "adapter"
+    cfg = _tr.LoraConfig(
+        model=base_model,
+        data_dir=data_dir,
+        adapter_path=adapter_path,
+        iters=iters,
+        batch_size=batch_size,
+        lora_layers=lora_layers,
+        learning_rate=learning_rate,
+    )
+    log_path = data_dir / "last_run.log"
+    console.rule(f"[bold blue]LoRA train — task={task}")
+    console.print(f"base model:   {base_model}")
+    console.print(f"iters:        {iters}")
+    console.print(f"layers:       {lora_layers}")
+    console.print(f"adapter →     {adapter_path}")
+    console.print(f"log →         {log_path}\n")
+
+    try:
+        for line in _tr.run_training(cfg, log_path=log_path):
+            # mlx_lm.lora печатает «Iter 50: Train loss 1.234, ...»
+            console.print(line)
+    except Exception as exc:
+        console.print(f"[red]✗[/red] Training failed: {exc}")
+        raise click.Abort from exc
+
+    # Запишем рядом training_metadata.json для воспроизводимости.
+    manifest_path = data_dir / "manifest.json"
+    manifest = (
+        __import__("json").loads(manifest_path.read_text(encoding="utf-8"))
+        if manifest_path.exists() else {}
+    )
+    _tr.write_adapter_metadata(adapter_path, cfg, manifest)
+    console.print(f"\n[green]✓[/green] Adapter готов: {adapter_path}")
+
+
+@lora_group.command("status")
+@click.option("--task", default="draft", type=click.Choice(["draft"]))
+def lora_status(task: str) -> None:
+    """Что лежит в data/lora/<task>/adapter/ ?"""
+    from personal_assistant.services import lora_trainer as _tr
+    info = _tr.adapter_status(_lora_dir(task) / "adapter")
+    if not info["exists"]:
+        console.print(f"[yellow]⚠[/yellow]  Адаптер не найден: {info['path']}")
+        return
+    table = Table(title=f"Adapter {task}", show_header=True)
+    table.add_column("Field", style="cyan")
+    table.add_column("Value", style="green")
+    table.add_row("Path",    info["path"])
+    table.add_row("Weights", "✓" if info["weights_present"] else "✗")
+    table.add_row("Config",  "✓" if info["config_present"] else "✗")
+    table.add_row("Size",    f"{info['size_mb']} MB")
+    console.print(table)
+
+
+@lora_group.command("clear")
+@click.option("--task", default="draft", type=click.Choice(["draft"]))
+@click.confirmation_option(prompt="Удалить адаптер? (датасет JSONL не трогаем)")
+def lora_clear(task: str) -> None:
+    """Удалить адаптер.  Датасет (JSONL) сохраняется."""
+    from personal_assistant.services import lora_trainer as _tr
+    adapter_path = _lora_dir(task) / "adapter"
+    if _tr.clear_adapter(adapter_path):
+        console.print(f"[green]✓[/green] Удалён: {adapter_path}")
+    else:
+        console.print(f"[yellow]⚠[/yellow]  Нечего удалять: {adapter_path}")
