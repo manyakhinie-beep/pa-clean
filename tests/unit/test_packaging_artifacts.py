@@ -34,7 +34,9 @@ _PACKAGING = _REPO / "packaging"
         "packaging/README.md",
         "packaging/pyapp.env",
         "packaging/Info.plist.template",
-        "packaging/entrypoint.py",
+        # Entry-point переехал в src/personal_assistant/app_launcher.py,
+        # см. test_exec_spec_not_under_packaging_namespace.
+        "src/personal_assistant/app_launcher.py",
         "scripts/build_pilot.sh",
         ".github/workflows/build-pilot.yml",
     ],
@@ -162,13 +164,41 @@ def test_pyapp_entry_module_points_to_real_callable():
     spec = m.group(1)
     # Должно быть в формате "module:function"
     mod, fn = spec.split(":", 1)
-    # entrypoint.py существует на диске
-    entry = _REPO / (mod.replace(".", "/") + ".py")
-    assert entry.exists(), f"entry module not on disk: {entry}"
+    # Модуль должен лежать внутри установленного wheel-пакета — пробуем
+    # обе типичных локации (src/* layout и top-level layout).
+    candidates = [
+        _REPO / "src" / (mod.replace(".", "/") + ".py"),
+        _REPO / (mod.replace(".", "/") + ".py"),
+    ]
+    entry = next((c for c in candidates if c.exists()), None)
+    assert entry is not None, (
+        f"entry module {mod!r} not found in any of: {[str(c) for c in candidates]}"
+    )
     # Содержит указанную функцию
     src_entry = entry.read_text(encoding="utf-8")
     assert re.search(rf"^def {re.escape(fn)}\(", src_entry, re.MULTILINE), (
         f"entrypoint {mod}:{fn} — function not defined"
+    )
+
+
+def test_exec_spec_not_under_packaging_namespace():
+    """``packaging`` — реальный PyPI-пакет (PyPA), который pip ставит как
+    транзитив через setuptools/pip-internal.  ``PYAPP_EXEC_SPEC`` под
+    этим namespace конфликтует: PyApp импортирует чужой ``packaging``,
+    submodule entrypoint не находит, бандл падает с ImportError
+    на первом же запуске.
+
+    Регрессия: убеждаемся что spec — в нашем package, не в ``packaging.*``."""
+    src = (_PACKAGING / "pyapp.env").read_text(encoding="utf-8")
+    m = re.search(r"^PYAPP_EXEC_SPEC=(\S+)", src, re.MULTILINE)
+    assert m, "PYAPP_EXEC_SPEC missing"
+    spec = m.group(1)
+    mod = spec.split(":", 1)[0]
+    top_level = mod.split(".", 1)[0]
+    assert top_level != "packaging", (
+        f"PYAPP_EXEC_SPEC={spec!r} collides with PyPI 'packaging' package. "
+        "Move entrypoint into personal_assistant.* or another namespace owned "
+        "by the wheel."
     )
 
 
@@ -178,13 +208,14 @@ def test_pyapp_entry_module_points_to_real_callable():
 
 
 def test_entrypoint_main_is_callable():
-    """Импортируем entrypoint и проверяем что main существует.
+    """Импортируем app_launcher и проверяем что main существует.
     Полный запуск не делаем — он стартует uvicorn."""
     import importlib.util
 
+    launcher_path = _REPO / "src" / "personal_assistant" / "app_launcher.py"
     spec = importlib.util.spec_from_file_location(
-        "_test_entrypoint",
-        _PACKAGING / "entrypoint.py",
+        "_test_app_launcher",
+        launcher_path,
     )
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

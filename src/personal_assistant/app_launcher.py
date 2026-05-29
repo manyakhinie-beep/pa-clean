@@ -1,19 +1,24 @@
 """
-packaging/entrypoint.py — PyApp-овский entry для PaClean .app бандла.
+app_launcher.py — entry-point модуль для PyApp-бандла PaClean.app.
+
+Раньше жил в ``packaging/entrypoint.py``, но столкнулся с name-collision:
+``packaging`` — это реальный PyPI-пакет (PyPA, дёрнут pip-ом),
+PyApp ставит его в venv, и ``import packaging.entrypoint`` находил
+тот модуль вместо нашего → ``ModuleNotFoundError: No module named
+'packaging'`` (на самом деле «no submodule entrypoint» в чужом
+пакете).  Переезд в ``personal_assistant`` устраняет collision
+и заодно гарантирует что launcher попадает в установленный wheel.
 
 Что делает:
-  1. Стартует FastAPI-сервер (``pa serve``) в фоне.
-  2. Открывает WebUI в браузере по умолчанию.
-  3. Держит процесс живым пока сервер не остановится.
+  1. Настраивает env-vars для vault / configs / logs в стандартных
+     macOS-локациях (``~/PaCleanVault``, ``~/Library/Application
+     Support/PaClean``, ``~/Library/Logs/PaClean``).
+  2. Стартует FastAPI-сервер через uvicorn.
+  3. Открывает WebUI в браузере по умолчанию.
+  4. Держит процесс живым пока сервер не остановится; ловит
+     SIGTERM/SIGINT для graceful shutdown по Cmd+Q.
 
-Логи пишем в ``~/Library/Logs/PaClean/server.log`` — стандартное
-место для пользовательских macOS-приложений (открывается через
-Console.app или просто доступно через Finder).  Это критично для
-пилота: тестировщик может приложить лог к bug-report-у через
-кнопку «Сообщить о проблеме».
-
-Запускается PyApp-launcher-ом через ``[project.scripts] pa-app``
-в pyproject.toml (см. ``pyapp.env``).
+Вызывается PyApp через ``PYAPP_EXEC_SPEC=personal_assistant.app_launcher:main``.
 """
 
 from __future__ import annotations
@@ -49,12 +54,12 @@ def _configure_logging() -> None:
             logging.StreamHandler(sys.stdout),
         ],
     )
-    logging.getLogger().info(f"PaClean entrypoint starting; log → {log_file}")
+    logging.getLogger().info(f"PaClean app_launcher starting; log → {log_file}")
 
 
 # ---------------------------------------------------------------------------
 # Default config: создаём ~/Library/Application Support/PaClean/ и
-# инициализируем vault + .env при первом запуске
+# инициализируем vault + env при первом запуске
 # ---------------------------------------------------------------------------
 
 
