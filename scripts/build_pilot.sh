@@ -241,6 +241,23 @@ mkdir -p "$APP_DIR/Contents/Resources"
 cp "$LAUNCHER" "$APP_DIR/Contents/MacOS/PaClean"
 chmod +x "$APP_DIR/Contents/MacOS/PaClean"
 
+# Иконка приложения.  Если icon.icns ещё не собран — пытаемся собрать
+# из packaging/icon-source.png; если и его нет, бандл выйдет с дефолтной
+# серой иконкой (macOS Finder не падает).
+ICON_SRC="$REPO_ROOT/packaging/icon-source.png"
+ICON_ICNS="$REPO_ROOT/packaging/icon.icns"
+if [[ ! -f "$ICON_ICNS" && -f "$ICON_SRC" ]]; then
+    info "Generating icon.icns from icon-source.png"
+    "$REPO_ROOT/scripts/make_icns.sh" "$ICON_SRC" "$ICON_ICNS" >/dev/null
+fi
+if [[ -f "$ICON_ICNS" ]]; then
+    # CFBundleIconFile=icon → имя файла должно быть icon.icns без префикса
+    cp "$ICON_ICNS" "$APP_DIR/Contents/Resources/icon.icns"
+    ok "icon: $APP_DIR/Contents/Resources/icon.icns"
+else
+    warn "иконка не найдена ($ICON_ICNS) — бандл выйдет без иконки"
+fi
+
 # Info.plist с подстановкой версии
 sed "s/__VERSION__/$PILOT_TAG/g" \
     "$REPO_ROOT/packaging/Info.plist.template" \

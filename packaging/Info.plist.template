@@ -20,6 +20,12 @@
     <key>CFBundleExecutable</key>
     <string>PaClean</string>
 
+    <!-- Иконка приложения.  Файл icon.icns кладётся в Contents/Resources/
+         build-скриптом (scripts/build_pilot.sh + make_icns.sh).  Если icns
+         отсутствует, macOS покажет дефолтную серую папку — Finder не падает. -->
+    <key>CFBundleIconFile</key>
+    <string>icon</string>
+
     <key>CFBundlePackageType</key>
     <string>APPL</string>
 

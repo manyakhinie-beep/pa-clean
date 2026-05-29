@@ -133,6 +133,12 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
+# Иконка приложения — генерируется отдельно через scripts/make_icns.sh.
+# Если icon.icns ещё не собран, PyInstaller просто пропустит иконку
+# (значение None), бандл соберётся с дефолтной серой папкой.
+_ICON_PATH = os.path.join(REPO_ROOT, "packaging", "icon.icns")
+_ICON = _ICON_PATH if os.path.exists(_ICON_PATH) else None
+
 exe = EXE(
     pyz,
     a.scripts,
@@ -148,6 +154,7 @@ exe = EXE(
     target_arch="arm64",  # Apple Silicon ONLY (MLX-требование)
     codesign_identity=None,  # ad-hoc подпись применим build-скриптом отдельно
     entitlements_file=None,
+    icon=_ICON,
 )
 
 coll = COLLECT(
@@ -164,7 +171,7 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name="PaClean.app",
-    icon=None,  # TODO: добавить icon.icns в Phase 2
+    icon=_ICON,  # см. _ICON_PATH выше — None если иконка не собрана
     bundle_identifier="com.paclean.assistant",
     info_plist={
         "CFBundleShortVersionString": "1.0.0",

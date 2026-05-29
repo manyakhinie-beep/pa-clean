@@ -68,6 +68,18 @@ if [[ ! -f "$REPO_ROOT/webui/dist/index.html" ]]; then
 fi
 ok "WebUI assets: $(du -sh webui/dist | cut -f1)"
 
+# ── Иконка ───────────────────────────────────────────────────────────────────
+# PaClean.spec ссылается на packaging/icon.icns; если он отсутствует,
+# PyInstaller вшивает дефолтную серую папку.  Пробуем сгенерить из PNG.
+ICON_SRC="$REPO_ROOT/packaging/icon-source.png"
+ICON_ICNS="$REPO_ROOT/packaging/icon.icns"
+if [[ ! -f "$ICON_ICNS" && -f "$ICON_SRC" ]]; then
+    info "Generating icon.icns from icon-source.png"
+    "$REPO_ROOT/scripts/make_icns.sh" "$ICON_SRC" "$ICON_ICNS" >/dev/null
+fi
+[[ -f "$ICON_ICNS" ]] && ok "Icon: $ICON_ICNS ($(du -h "$ICON_ICNS" | cut -f1))" \
+                      || warn "Иконка не найдена — бандл выйдет без иконки"
+
 # ── Шаг 2: временный venv с PyInstaller + PyWebView ─────────────────────────
 BUILD_VENV="$REPO_ROOT/.venv-pyinstaller"
 info "[2/4] Setting up build venv ($BUILD_VENV)"
