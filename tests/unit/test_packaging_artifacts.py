@@ -204,3 +204,63 @@ def test_workflow_runs_smoke_launch():
     src = (_REPO / ".github" / "workflows" / "build-pilot.yml").read_text(encoding="utf-8")
     assert "MacOS/PaClean" in src
     assert "Smoke" in src or "smoke" in src
+
+
+def test_workflow_opts_into_node24():
+    """GitHub deprecates Node 20 on actions runners 16 Sep 2026.
+    Workflow должен явно включить Node 24, иначе после deadline
+    actions сломаются молча."""
+    src = (_REPO / ".github" / "workflows" / "build-pilot.yml").read_text(encoding="utf-8")
+    assert "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24" in src, (
+        "workflow must set FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true"
+    )
+
+
+def test_workflow_uses_modern_setup_uv():
+    """astral-sh/setup-uv v3 крутится на Node 20 (deprecated).
+    v5 — Node-24-ready (декабрь 2025)."""
+    src = (_REPO / ".github" / "workflows" / "build-pilot.yml").read_text(encoding="utf-8")
+    assert "astral-sh/setup-uv@v3" not in src, (
+        "setup-uv@v3 is Node-20-only; bump to @v5"
+    )
+    assert "astral-sh/setup-uv@v5" in src
+
+
+# ----------------------------------------------------------------------
+# Python version consistency — mlx 0.30+ ships cp313-only wheels.
+# Если pyapp.env скажет 3.12, а build_pilot.sh — 3.13 (или наоборот),
+# wheelhouse не соберётся.  Закрепляем единое значение во всём
+# пайплайне.
+# ----------------------------------------------------------------------
+
+
+def test_pyapp_python_version_matches_build_script():
+    pyapp_env = (_PACKAGING / "pyapp.env").read_text(encoding="utf-8")
+    build_sh = (_REPO / "scripts" / "build_pilot.sh").read_text(encoding="utf-8")
+
+    m_env = re.search(r"^PYAPP_PYTHON_VERSION=(\S+)", pyapp_env, re.MULTILINE)
+    assert m_env, "PYAPP_PYTHON_VERSION not declared"
+    env_ver = m_env.group(1).strip()
+
+    m_sh = re.search(r"--python-version\s+(\d+\.\d+)", build_sh)
+    assert m_sh, "build_pilot.sh missing --python-version"
+    sh_ver = m_sh.group(1)
+
+    assert env_ver == sh_ver, (
+        f"Python version mismatch: pyapp.env={env_ver}, build_pilot.sh={sh_ver}. "
+        "These must agree or wheelhouse won't match the bootstrap interpreter "
+        "(see mlx 0.30+ cp313-only wheels regression in CI)."
+    )
+
+
+def test_python_version_is_recent_enough_for_mlx():
+    """mlx 0.30+ публикует wheels только для cp313 — версия в pyapp.env
+    должна быть как минимум 3.13."""
+    pyapp_env = (_PACKAGING / "pyapp.env").read_text(encoding="utf-8")
+    m = re.search(r"^PYAPP_PYTHON_VERSION=(\d+)\.(\d+)", pyapp_env, re.MULTILINE)
+    assert m, "PYAPP_PYTHON_VERSION missing or malformed"
+    major, minor = int(m.group(1)), int(m.group(2))
+    assert (major, minor) >= (3, 13), (
+        f"PYAPP_PYTHON_VERSION={major}.{minor} — mlx-lm requires Python 3.13+ "
+        "(cp313-only wheels published since mlx 0.30)"
+    )

@@ -28,6 +28,12 @@ on:
         required: false
         default: 'dev'
 
+# Принудительно запускаем JS-actions на Node 24.  GitHub announced Node 20
+# deprecation в сентябре 2025; этот env заглушает warning и заодно
+# готовит workflow к 16 сентября 2026, когда Node 20 уберут с runner-ов.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   build:
     runs-on: macos-14
@@ -39,7 +45,8 @@ jobs:
           fetch-depth: 0
 
       # ── uv для wheel-builder + lock ─────────────────────────────────────
-      - uses: astral-sh/setup-uv@v3
+      # v5 — последний стабильный (декабрь 2025), полностью Node-24-ready.
+      - uses: astral-sh/setup-uv@v5
         with:
           version: latest
 
